@@ -1,0 +1,16 @@
+name:                mimizu
+version:             0.1.0.0
+homepage:            https://github.com/yharuhi39/mimizu#readme
+license:             MIT
+author:              Apple Princess
+maintainer:          Apple Princess
+copyright:           2018 Apple Princess
+category:            Web
+extra-source-files:
+- README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+
+library:
+  source-dirs: src
