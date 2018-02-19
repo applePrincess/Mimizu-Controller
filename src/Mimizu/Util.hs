@@ -6,11 +6,15 @@ module Mimizu.Util
   , conv32To8
   , convToFloat
   , Color(..)
-  , colorToString ) where
+  , colorToString
+  , fromStringToColor
+  , Index ) where
 
-import Data.Word (Word8, Word16, Word32)
 import Data.Bits (shiftL, shiftR, (.&.))
+import Data.Word (Word8, Word16, Word32)
 import Unsafe.Coerce
+
+
 conv8To16 :: [Word8] -> Word16
 conv8To16 [x, y] = (unsafeCoerce x :: Word16) `shiftL` 8 + unsafeCoerce y :: Word16
 conv8To16  v     = error $ "Unconvertible array found: " ++ show v
@@ -40,12 +44,26 @@ conv32To8 x = [ unsafeCoerce (x `shiftR` 24         ) :: Word8
 convToFloat :: Word32 -> Float
 convToFloat = unsafeCoerce
 
+-- | The representation of color palette.
+data Color = NeonBlue          -- ^ The clolor of #3333ff
+           | SummerSky         -- ^ The clolor of #33bbff
+           | LimeGreen         -- ^ The clolor of #33ff33
+           | Turquoise1        -- ^ The clolor of #33ffbb
+           | Turquoise2        -- ^ The clolor of #33eeee
+           | ElectricPurple    -- ^ The clolor of #bb33ff
+           | LavenderGray      -- ^ The clolor of #bbbbee
+           | GreenYellow       -- ^ The clolor of #bbff33
+           | FringyFlower      -- ^ The clolor of #bbeebb
+           | RedOrange         -- ^ The clolor of #ff3333
+           | RazzleDazzleRose1 -- ^ The clolor of #ff33bb
+           | RazzleDazzleRose2 -- ^ The clolor of #ee33ee
+           | LightningYellow   -- ^ The clolor of #eeaa33
+           | BeautyBush        -- ^ The clolor of #eebbbb
+           | GoldenFizz        -- ^ The clolor of #eeee33
+           | Whisper           -- ^ The clolor of #eeeeee
+           deriving Enum
 
-data Color = NeonBlue | SummerSky | LimeGreen | Turquoise1
-           | Turquoise2 | ElectricPurple | LavenderGray | GreenYellow
-           | FringyFlower | RedOrange | RazzleDazzleRose1 | RazzleDazzleRose2
-           | LightningYellow | BeautyBush | GoldenFizz | Whisper deriving Enum
-
+-- | Convert Color to CSS acceptable string
 colorToString :: Color -> String
 colorToString c = case c of
   NeonBlue          -> "#3333ff"
@@ -64,3 +82,27 @@ colorToString c = case c of
   BeautyBush        -> "#eebbbb"
   GoldenFizz        -> "#eeee33"
   Whisper           -> "#eeeeee"
+
+-- | Convert css color hex-triplet to Color
+fromStringToColor :: String -> Color
+fromStringToColor str = case str of
+  "#3333ff" -> NeonBlue
+  "#33bbff" -> SummerSky
+  "#33ff33" -> LimeGreen
+  "#33ffbb" -> Turquoise1
+  "#33eeee" -> Turquoise2
+  "#bb33ff" -> ElectricPurple
+  "#bbbbee" -> LavenderGray
+  "#bbff33" -> GreenYellow
+  "#bbeebb" -> FringyFlower
+  "#ff3333" -> RedOrange
+  "#ff33bb" -> RazzleDazzleRose1
+  "#ee33ee" -> RazzleDazzleRose2
+  "#eeaa33" -> LightningYellow
+  "#eebbbb" -> BeautyBush
+  "#eeee33" -> GoldenFizz
+  "#eeeeee" -> Whisper
+  _         -> error $ "Unrecognized color string found: " ++ str
+
+-- | Index type
+type Index = Word32
