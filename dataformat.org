@@ -1,0 +1,59 @@
+#+TITLE: The Format of WebSocket Data
+#+AUTHOR: Apple Princess
+
+In this article I am going to demostrate how the data, specially Mimizu like game[fn:1] written by T.Umezawa
+
+Ports to be connected
+In the game, two ports are used, 8888 and 8891.
+8888 is for communicating a game data, which I mainly write about.
+8891 is for chatting with other player.
+
+* When Open the socket
+The client must send its gPID which is the same as session ID.
+You can aquire the PID by accessing http://tk2-217-18218.vs.sakura.ne.jp/
+And your cookie for the url will have value of the key /pid/
+This applies to all data and chat socket, with an exception
+to connect chat socket, you need to also send the stirng "CHAT" splitted by a tab character.
+
+* The format of data from game port
+Your data can be either a string or a blob.
+- string: You will have a sequence of name\tskin splitted by a tab character.
+- blob: Your main game data will be demonstrated below.
+
+You will have either 'A' <a-data>, 'P' <p-data>, 'D' <d-data>, F <f-data> or 'N' <n-data>
+
+p-data format: <index>, <number-of-joints>, <other-data>
+where <index> and <number-of-joints> are uint8.
+
+other-data contains <va> <sbm>|(<usx><usy>) <joint-data>
+where va is uint32. sbm, usx and usy are uint16
+
+joint-data contains <j-data>
+if number-of-joints is equal to 0, j-data will be [<head-x>, <head-y>]
+where head-x and head-y are uint16.
+otherwise, j-data will be [<joint-x1>, <joint-y1>, <joint-x2>, <joint-y2>,...<joint-nx>, <joint-ny>]
+where <joint-x_i>, <joint-y_i> is float32.
+
+d-data contains <index>. where <index> is uint8.
+
+f-data contains <index>, <number-of-foods>, <food-data>
+where <findex> and <number-of-foods> are uint8.
+f-data contains [<food-x_1>, <food-y1>, <food-x_2>, <food-y2>, ... <food-x_3>, <food-yn>]
+where <food-x_i> and <food-y_i> are uint16.
+
+n-data contains <index>. where <index> is uint8.
+
+* The format of data from chat port
+if it is string, the data will be formatted as
+<from> <time>
+
+
+
+
+NOTE:all data for more than 2 bytes are arranged in little endian.
+
+
+
+
+* 
+[fn:1] The game link is http://tk2-217-18218.vs.sakura.ne.jp/mimizu/

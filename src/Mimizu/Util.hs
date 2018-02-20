@@ -8,7 +8,8 @@ module Mimizu.Util
   , Color(..)
   , colorToString
   , fromStringToColor
-  , Index ) where
+  , Index
+  , intToWord8 ) where
 
 import Data.Bits (shiftL, shiftR, (.&.))
 import Data.Word (Word8, Word16, Word32)
@@ -106,3 +107,8 @@ fromStringToColor str = case str of
 
 -- | Index type
 type Index = Word32
+
+intToWord8 :: Int -> Word8
+intToWord8 num = if num >= 0 && num < 256
+                 then unsafeCoerce num
+                 else error $ "Out of range value found: " ++ show num
