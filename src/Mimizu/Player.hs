@@ -89,11 +89,12 @@ getSpd = (.&. 0x1fff) . getSBM
 getVol :: Player -> Word32
 getVol = (.&. 0xfffffff) . getVA
 --     = `shiftR` 8 . getVA
--- | The radius of minimum turning.
+
+-- | The thickness of the player.
 getSR :: Player -> Float
 getSR = sizeR . getVol
 
-
+-- | Minimum turn radius
 getTR :: Player -> Float
 getTR pl = 350 / spd / max 1 (sh - 1)
   where spd = fromIntegral $ getSpd pl :: Float
@@ -114,7 +115,6 @@ getY0 pl = if getJN pl < 0 then Left (getUSY pl) else Right (getY 0 pl)
 -- | Current Actual Head the player specified is going
 getAngle :: Player -> Float
 getAngle pl = atan2 (getY 0 pl - getY 1 pl) (getX 0 pl - getY 1 pl)
-
 
 -- | The x location of idx-th joints of the player specified
 getJointX :: Index -> Player -> Float

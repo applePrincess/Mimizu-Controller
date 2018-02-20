@@ -18,7 +18,8 @@ module Mimizu.Util
   , colorToString
   , fromStringToColor
   , Index
-  , intToWord8 ) where
+  , intToWord8
+  , integralToIndex ) where
 
 import Data.Bits (shiftL, shiftR, (.&.))
 import Data.Word (Word8, Word16, Word32)
@@ -128,3 +129,6 @@ intToWord8 :: Int -> Word8
 intToWord8 num = if num >= 0 && num < 256
                  then unsafeCoerce num
                  else error $ "Out of range value found: " ++ show num
+
+integralToIndex :: Integral a => a -> Index
+integralToIndex = unsafeCoerce

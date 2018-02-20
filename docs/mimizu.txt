@@ -126,6 +126,7 @@ type Index = Word32
 
 -- | Convert Haskell Int to Word8
 intToWord8 :: Int -> Word8
+integralToIndex :: Integral a => a -> Index
 instance GHC.Enum.Enum Mimizu.Util.Color
 
 
@@ -197,8 +198,10 @@ getSpd :: Player -> Word16
 -- | The actual length the specified player has
 getVol :: Player -> Word32
 
--- | The radius of minimum turning.
+-- | The thickness of the player.
 getSR :: Player -> Float
+
+-- | Minimum turn radius
 getTR :: Player -> Float
 
 -- | The x location of head of the player specified. if it is too far,
@@ -255,3 +258,33 @@ getY :: Index -> FoodBlock -> Word8
 
 
 module Mimizu
+
+module Framework
+toAddrString :: (Word8, Word8, Word8, Word8) -> String
+gamePort :: PortNumber
+
+-- | Current list of players, may or may not be upto dated depending on the
+--   distance from you Current list of food blocks, it will not be upto
+--   dated for the block where the block you are not in. Action.
+chatPort :: PortNumber
+type GameAngle = Word16  Must be in range 0 ~ 4096
+type DashFlag = Bool  True if dash is on, False otherwise
+type GameReceiveCallback = Index -> [(Index, Player)] -> [(Index, FoodBlock)] -> (DashFlag, GameAngle)
+type MutablePlayerList = [(Index, IORef Player)]
+type MutableFoodList = [(Index, IORef FoodBlock)]
+type PlayerID = IORef Index
+pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
+eliminateIORef :: (Index, IORef a) -> IO (Index, a)
+parsePlayer :: MutablePlayerList -> Index -> [Word8] -> IO ()
+parseAction :: MutablePlayerList -> Index -> [Word8] -> IO ()
+parseDeath :: MutablePlayerList -> Index -> [Word8] -> IO ()
+parseFood :: MutableFoodList -> Index -> [Word8] -> IO ()
+
+-- | A tag for parsing data
+parseNumber :: IORef Index -> Word8 -> IO ()
+playerParseTag :: Word8
+actionParseTag :: Word8
+foodParseTag :: Word8
+deathParseTag :: Word8
+numberParseTag :: Word8
+parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO ()
