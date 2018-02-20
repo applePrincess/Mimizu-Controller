@@ -1,3 +1,11 @@
+{-|
+Module      : Mimizu.Chat
+Copyright   : (c) Apple Princess 2018
+License     : MIT
+Maintainer  : Apple Princess
+Stability   : experimental
+Portability : portable
+-}
 module Mimizu.Chat where
 
 import Data.Time.Clock

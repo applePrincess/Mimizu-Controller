@@ -1,4 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
+{-|
+Module      : Mimizu.Player
+Copyright   : (c) Apple Princess 2018
+License     : MIT
+Maintainer  : Apple Princess
+Stability   : experimental
+Portability : portable
+-}
+
 module Mimizu.Player where
 
 import Data.Bits (shiftR, (.&.))
@@ -10,6 +19,8 @@ import Mimizu.Util
 -- | The type of the length
 type Length = Word32
 
+
+-- | The representation of player
 data Player = Player { skin :: [Color] -- ^ Skin information, a sequence of color
                      , name :: String  -- ^ Name to be displayed
                      , excreta :: Int  -- ^ Counter to be shorten

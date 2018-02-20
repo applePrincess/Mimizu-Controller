@@ -1,3 +1,12 @@
+{-|
+Module      : Mimizu.Util
+Copyright   : (c) Apple Princess 2018
+License     : MIT
+Maintainer  : Apple Princess
+Stability   : experimental
+Portability : portable
+-}
+
 module Mimizu.Util
   ( conv8To16
   , conv8To32
@@ -15,11 +24,12 @@ import Data.Bits (shiftL, shiftR, (.&.))
 import Data.Word (Word8, Word16, Word32)
 import Unsafe.Coerce
 
-
+-- | Convert from raw websocket data to Uint16
 conv8To16 :: [Word8] -> Word16
 conv8To16 [x, y] = (unsafeCoerce x :: Word16) `shiftL` 8 + unsafeCoerce y :: Word16
 conv8To16  v     = error $ "Unconvertible array found: " ++ show v
 
+-- | Convert from raw websocket data to Uint32
 conv8To32 :: [Word8] -> Word32
 conv8To32 [x, y, z, w] = (unsafeCoerce x :: Word32) `shiftL` 24 +
                          (unsafeCoerce y :: Word32) `shiftL` 16 +
@@ -27,21 +37,25 @@ conv8To32 [x, y, z, w] = (unsafeCoerce x :: Word32) `shiftL` 24 +
                          unsafeCoerce w :: Word32
 conv8To32  v     = error $ "Unconvertible array found: " ++ show v
 
+-- | Convert from raw websocket data to Float
 conv8To32f :: [Word8] -> Float
 conv8To32f xs = if length xs == 4
                 then convToFloat $ conv8To32  xs
                 else error $ "Unconvertible array found: " ++ show xs
 
+-- | Convert from Uint16 to sendable data
 conv16To8 :: Word16 -> [Word8]
 conv16To8 x = [ unsafeCoerce (x `shiftR` 8) :: Word8
               , unsafeCoerce (x .&. 0xff) :: Word8]
 
+-- | Convert from Uint32 to sendable data
 conv32To8 :: Word32 -> [Word8]
 conv32To8 x = [ unsafeCoerce (x `shiftR` 24         ) :: Word8
               , unsafeCoerce (x `shiftR` 16 .&. 0xff) :: Word8
               , unsafeCoerce (x `shiftR`  8 .&. 0xff) :: Word8
               , unsafeCoerce (x .&. 0xff            ) :: Word8]
 
+-- | Convert from Uint32 to Float
 convToFloat :: Word32 -> Float
 convToFloat = unsafeCoerce
 
@@ -108,6 +122,8 @@ fromStringToColor str = case str of
 -- | Index type
 type Index = Word32
 
+
+-- | Convert Haskell Int to Word8
 intToWord8 :: Int -> Word8
 intToWord8 num = if num >= 0 && num < 256
                  then unsafeCoerce num
