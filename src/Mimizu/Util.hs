@@ -38,6 +38,8 @@ conv8To16 :: [Word8] -> Word16
 conv8To16 [x, y] = (unsafeCoerce x :: Word16) `shiftL` 8 + unsafeCoerce y :: Word16
 conv8To16  v     = error $ "Unconvertible array found: " ++ show v
 
+-- | Convert from raw websocket data to list of Uint16.
+--   Note: the length of list must be multiple of 2.
 conv8To16s :: [Word8] -> [Word16]
 conv8To16s xs = conv8To16 (take 2 xs) : conv8To16s (drop 2 xs)
 
@@ -141,15 +143,17 @@ intToWord8 num = if num >= 0 && num < 256
                  then unsafeCoerce num
                  else error $ "Out of range value found: " ++ show num
 
+-- | Convert to Index type
 integralToIndex :: Integral a => a -> Index
 integralToIndex = unsafeCoerce
 
-
+-- | Convert Text to list of Triplets
 makeTriplets :: Text -> [(Index, String, [Color])]
 makeTriplets txt = (read $ unpack x, unpack y, makeColors $ unpack z):case xs of
                                                                [] -> []
                                                                _  -> makeTriplets (intercalate (pack "\t") xs)
   where (x:y:z:xs) = splitOn (pack "\t") txt
 
+-- | Convert framework color enum from string
 makeColors :: String -> [Color]
 makeColors = map (\c ->  toEnum $ head (readHex [c]) & fst)

@@ -55,6 +55,10 @@ conv8To32 :: [Word8] -> Word32
 -- | Convert from raw websocket data to Float
 conv8To32f :: [Word8] -> Float
 
+-- | Convert from raw websocket data to list of Uint16. Note: the length of
+--   list must be multiple of 2.
+conv8To16s :: [Word8] -> [Word16]
+
 -- | Convert from Uint16 to sendable data
 conv16To8 :: Word16 -> [Word8]
 
@@ -126,7 +130,15 @@ type Index = Word32
 
 -- | Convert Haskell Int to Word8
 intToWord8 :: Int -> Word8
+
+-- | Convert to Index type
 integralToIndex :: Integral a => a -> Index
+
+-- | Convert Text to list of Triplets
+makeTriplets :: Text -> [(Index, String, [Color])]
+
+-- | Convert framework color enum from string
+makeColors :: String -> [Color]
 instance GHC.Enum.Enum Mimizu.Util.Color
 
 
@@ -137,7 +149,7 @@ type Length = Word32
 
 -- | The representation of player
 data Player
-Player :: [Color] -> String -> Int -> Word16 -> [Word8] -> Player
+Player :: [Color] -> String -> Word32 -> Word16 -> [Word8] -> Player
 
 -- | Skin information, a sequence of color
 [skin] :: Player -> [Color]
@@ -146,7 +158,7 @@ Player :: [Color] -> String -> Int -> Word16 -> [Word8] -> Player
 [name] :: Player -> String
 
 -- | Counter to be shorten
-[excreta] :: Player -> Int
+[excreta] :: Player -> Word32
 
 -- | Recent action
 [act] :: Player -> Word16
@@ -230,6 +242,26 @@ getX :: Index -> Player -> Float
 -- | Compatibility function for getJointX and getJointY
 getY :: Index -> Player -> Float
 
+-- | The helper function for <a>MutablePlayerList</a>, it will modify the
+--   player info.
+modifyPlayerInfo :: [Word8] -> Maybe Player -> Maybe Player
+
+-- | The helper function for <a>MutablePlayerList</a>, it will modify the
+--   action.
+modifyAction :: Word16 -> Maybe Player -> Maybe Player
+
+-- | The helper function for <a>MutablePlayerList</a>, it will modify the
+--   excreta
+modifyExcreta :: Word32 -> Maybe Player -> Maybe Player
+
+-- | The helper function for <a>MutablePlayerList</a>, it will modify the
+--   name
+modifyName :: String -> Maybe Player -> Maybe Player
+
+-- | The helper function for <a>MutablePlayerList</a>, it will modify the
+--   skin
+modifySkin :: [Color] -> Maybe Player -> Maybe Player
+
 
 module Mimizu.Food
 
@@ -259,32 +291,83 @@ getY :: Index -> FoodBlock -> Word8
 
 module Mimizu
 
+
 module Framework
+
+-- | The destination IP address the socket connects to, in the form of
+--   Word8 quadruplet.
+hostAddress :: (Word8, Word8, Word8, Word8)
+
+-- | Convert Word8 quadruple to host string.
 toAddrString :: (Word8, Word8, Word8, Word8) -> String
+
+-- | The port number the socket accepts.
 gamePort :: PortNumber
 
--- | Current list of players, may or may not be upto dated depending on the
---   distance from you Current list of food blocks, it will not be upto
---   dated for the block where the block you are not in. Action.
+-- | The port number the socket accepts.
 chatPort :: PortNumber
-type GameAngle = Word16  Must be in range 0 ~ 4096
-type DashFlag = Bool  True if dash is on, False otherwise
-type GameReceiveCallback = Index -> [(Index, Player)] -> [(Index, FoodBlock)] -> (DashFlag, GameAngle)
-type MutablePlayerList = [(Index, IORef Player)]
+
+-- | The callback function, this is called when message from
+--   <a>gamePort</a>.
+type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> (DashFlag, GameAngle)  The action you intend to be taken.
+type GameAngle = Word16  Must be in range 0 ~ 4096.
+type DashFlag = Bool  True if dash is on, False otherwise.
+
+-- | A list/map of players, Nothing if the player for that Index is not
+--   being played/dead.
+type MutablePlayerList = [(Index, IORef (Maybe Player))]
+
+-- | A list/map of foods, Index represents the block.
 type MutableFoodList = [(Index, IORef FoodBlock)]
+
+-- | Your ID for playing, the index is the key of MutablePlayerList.
 type PlayerID = IORef Index
+
+-- | Convert to websocket acceptable form.
+convertToSendable :: (DashFlag, GameAngle) -> ByteString
+run :: GameReceiveCallback -> ClientApp ()
+mainLoop :: GameReceiveCallback -> IO ()
+
+-- | Convert mutable list/map to immutable
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
+
+-- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
+
+-- | Modify player list using parsed player other info for the specific
+--   plaeyr
 parsePlayer :: MutablePlayerList -> Index -> [Word8] -> IO ()
+
+-- | Modify player list using pased action binary data for the specific
+--   player
 parseAction :: MutablePlayerList -> Index -> [Word8] -> IO ()
-parseDeath :: MutablePlayerList -> Index -> [Word8] -> IO ()
+
+-- | Modify player list using parsed death info
+parseDeath :: MutablePlayerList -> Index -> IO ()
+
+-- | Modify food list using parsed food info.
 parseFood :: MutableFoodList -> Index -> [Word8] -> IO ()
 
--- | A tag for parsing data
+-- | Modify ist using parsed index value
 parseNumber :: IORef Index -> Word8 -> IO ()
+
+-- | A tag for parsing data.
 playerParseTag :: Word8
+
+-- | A tag for parsing data.
 actionParseTag :: Word8
+
+-- | A tag for parsing data.
 foodParseTag :: Word8
+
+-- | A tag for parsing data.
 deathParseTag :: Word8
+
+-- | A tag for parsing data.
 numberParseTag :: Word8
+
+-- | parse binary data from <tt>gameSocket</tt>.
 parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO ()
+
+-- | parse text data from <tt>gameSocket</tt>
+parseSkinData :: MutablePlayerList -> Text -> IO ()

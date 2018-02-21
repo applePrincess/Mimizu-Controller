@@ -1,5 +1,13 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TupleSections #-}
+{-|
+Module      : Framework
+Copyright   : (c) Apple Princess 2018
+License     : MIT
+Maintainer  : Apple Princess
+Stability   : experimental
+Portability : portable
+-}
 module Framework where
 
 import           Control.Concurrent (forkIO)
@@ -21,7 +29,7 @@ import Mimizu
 hostAddress :: (Word8, Word8, Word8, Word8)
 hostAddress = (160, 16, 82, 222)
 
-  -- | Convert Word8 quadruple to host string.
+-- | Convert Word8 quadruple to host string.
 toAddrString :: (Word8, Word8, Word8, Word8) -> String
 toAddrString (x, y, z, w) = show x ++ "." ++ show y ++ "." ++ show z ++ "." ++ show w
 
@@ -82,31 +90,36 @@ mainLoop cb = withSocketsDo $ runClient hostString (fromEnum gamePort) "/" (run 
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
 pullIORefs = mapM eliminateIORef
 
+-- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
-eliminateIORef (idx, ref) = fmap (idx,) (readIORef ref)
+eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
 
--- | parse specific binary data
 parsePlayer, parseAction  :: MutablePlayerList -> Index ->  [Word8] -> IO ()
 
+-- | Modify player list using pased action binary data for the specific player
 parseAction lst idx d = modifyIORef ref (modifyAction val)
   where (Just ref) = lookup idx lst
         val        = conv8To16 d
 
+-- | Modify player list using parsed player other info for the specific plaeyr
 parsePlayer lst idx d = modifyIORef ref (modifyPlayerInfo d)
   where Just ref = lookup idx lst
 
+-- | Modify player list using parsed death info
 parseDeath :: MutablePlayerList -> Index -> IO ()
 parseDeath lst idx = writeIORef ref Nothing
   where Just ref = lookup idx lst
 
+-- | Modify food list using parsed food info.
 parseFood :: MutableFoodList  -> Index -> [Word8] -> IO ()
 parseFood lst idx d = writeIORef ref $ FoodBlock d
   where Just ref = lookup idx lst
 
+-- | Modify ist using parsed index value
 parseNumber :: IORef Index -> Word8 -> IO ()
 parseNumber ref idx = writeIORef ref (integralToIndex idx)
 
--- | A tag for parsing data
+-- | A tag for parsing data.
 playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag :: Word8
 
 playerParseTag = intToWord8 $ fromEnum 'P'
@@ -115,7 +128,7 @@ foodParseTag   = intToWord8 $ fromEnum 'F'
 deathParseTag  = intToWord8 $ fromEnum 'D'
 numberParseTag = intToWord8 $ fromEnum 'N'
 
--- | parse binary data from 'gameSocket'
+-- | parse binary data from 'gameSocket'.
 parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO ()
 parseGameData pid players foods (x:xs) =
   if | x == playerParseTag -> do

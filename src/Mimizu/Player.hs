@@ -128,17 +128,23 @@ getX, getY :: Index -> Player -> Float
 getX = getJointX
 getY = getJointY
 
+
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the player info.
 modifyPlayerInfo :: [Word8] -> Maybe Player -> Maybe Player
 modifyPlayerInfo d = maybe Nothing (\(Player s n e a _) ->  Just $ Player s n e a d)
 
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the action.
 modifyAction :: Word16 -> Maybe Player -> Maybe Player
 modifyAction d = maybe Nothing (\(Player s n e _ p) ->  Just $ Player s n e d p)
 
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the excreta
 modifyExcreta :: Word32 -> Maybe Player -> Maybe Player
 modifyExcreta d = maybe Nothing (\(Player s n _ a p) ->  Just $ Player s n d a p)
 
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the name
 modifyName :: String -> Maybe Player -> Maybe Player
 modifyName d = maybe Nothing (\(Player s _ e a p) ->  Just $ Player s d e a p)
 
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
 modifySkin :: [Color] -> Maybe Player -> Maybe Player
 modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)
