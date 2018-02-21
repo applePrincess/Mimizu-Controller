@@ -7,7 +7,6 @@ Maintainer  : Apple Princess
 Stability   : experimental
 Portability : portable
 -}
-
 module Mimizu.Player where
 
 import Data.Bits (shiftR, (.&.))
@@ -19,12 +18,11 @@ import Mimizu.Util
 -- | The type of the length
 type Length = Word32
 
-
 -- | The representation of player
-data Player = Player { skin :: [Color] -- ^ Skin information, a sequence of color
-                     , name :: String  -- ^ Name to be displayed
-                     , excreta :: Int  -- ^ Counter to be shorten
-                     , act :: Word16   -- ^ Recent action
+data Player = Player { skin       :: [Color] -- ^ Skin information, a sequence of color
+                     , name       :: String  -- ^ Name to be displayed
+                     , excreta    :: Word32  -- ^ Counter to be shorten
+                     , act        :: Word16  -- ^ Recent action
                      , playerInfo :: [Word8] -- ^ Joints and other info
                      }
 
@@ -47,7 +45,6 @@ getAct = act
 getSBM :: Player -> Word16
 getSBM = conv8To16 . take 2 . drop 4 . playerInfo
 
-
 -- | The rough x-location, this function is only available when
 --   the distance between you and the player specified is enough
 getUSX :: Player -> Word16
@@ -57,7 +54,6 @@ getUSX = conv8To16 . take 2 . drop 4 . playerInfo
 --   the distance between you and the player specified is enough
 getUSY :: Player -> Word16
 getUSY = conv8To16 . take 2 . drop 6 . playerInfo
-
 
 -- | the counter when the player specified is overlapping/overlapped by other player.
 --   when this counter is enough, `going straight` bug will occur.
@@ -75,7 +71,6 @@ getBtn = (/= 0) . (.&. 0x800) . getAct
 -- | Number of joints of the player specified
 getJN :: Player -> Int32
 getJN = (\x -> (toEnum x::Int32) - 14 `div` 8) . length . playerInfo
-
 
 -- | The `gear` the player currently in
 getSH :: Player -> Float
@@ -132,3 +127,18 @@ sizeR v = fromIntegral v ** 0.21875 * 7
 getX, getY :: Index -> Player -> Float
 getX = getJointX
 getY = getJointY
+
+modifyPlayerInfo :: [Word8] -> Maybe Player -> Maybe Player
+modifyPlayerInfo d = maybe Nothing (\(Player s n e a _) ->  Just $ Player s n e a d)
+
+modifyAction :: Word16 -> Maybe Player -> Maybe Player
+modifyAction d = maybe Nothing (\(Player s n e _ p) ->  Just $ Player s n e d p)
+
+modifyExcreta :: Word32 -> Maybe Player -> Maybe Player
+modifyExcreta d = maybe Nothing (\(Player s n _ a p) ->  Just $ Player s n d a p)
+
+modifyName :: String -> Maybe Player -> Maybe Player
+modifyName d = maybe Nothing (\(Player s _ e a p) ->  Just $ Player s d e a p)
+
+modifySkin :: [Color] -> Maybe Player -> Maybe Player
+modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)

@@ -11,8 +11,12 @@ extra-source-files:
 
 dependencies:
   - base >= 4.7 && < 5
-  - time
+  - bytestring
   - network
+  - time
+  - text
+  - websockets
+
 library:
   source-dirs: src
 

@@ -11,6 +11,7 @@ module Mimizu.Util
   ( conv8To16
   , conv8To32
   , conv8To32f
+  , conv8To16s
   , conv16To8
   , conv32To8
   , convToFloat
@@ -19,16 +20,26 @@ module Mimizu.Util
   , fromStringToColor
   , Index
   , intToWord8
-  , integralToIndex ) where
+  , integralToIndex
+  , makeTriplets
+  , makeColors ) where
 
 import Data.Bits (shiftL, shiftR, (.&.))
+import Data.Function ((&))
 import Data.Word (Word8, Word16, Word32)
+import  Numeric (readHex)
+
 import Unsafe.Coerce
+
+import Data.Text (pack, splitOn, Text, intercalate, unpack)
 
 -- | Convert from raw websocket data to Uint16
 conv8To16 :: [Word8] -> Word16
 conv8To16 [x, y] = (unsafeCoerce x :: Word16) `shiftL` 8 + unsafeCoerce y :: Word16
 conv8To16  v     = error $ "Unconvertible array found: " ++ show v
+
+conv8To16s :: [Word8] -> [Word16]
+conv8To16s xs = conv8To16 (take 2 xs) : conv8To16s (drop 2 xs)
 
 -- | Convert from raw websocket data to Uint32
 conv8To32 :: [Word8] -> Word32
@@ -132,3 +143,13 @@ intToWord8 num = if num >= 0 && num < 256
 
 integralToIndex :: Integral a => a -> Index
 integralToIndex = unsafeCoerce
+
+
+makeTriplets :: Text -> [(Index, String, [Color])]
+makeTriplets txt = (read $ unpack x, unpack y, makeColors $ unpack z):case xs of
+                                                               [] -> []
+                                                               _  -> makeTriplets (intercalate (pack "\t") xs)
+  where (x:y:z:xs) = splitOn (pack "\t") txt
+
+makeColors :: String -> [Color]
+makeColors = map (\c ->  toEnum $ head (readHex [c]) & fst)
