@@ -139,6 +139,8 @@ makeTriplets :: Text -> [(Index, String, [Color])]
 
 -- | Convert framework color enum from string
 makeColors :: String -> [Color]
+instance GHC.Show.Show Mimizu.Util.Color
+instance GHC.Classes.Eq Mimizu.Util.Color
 instance GHC.Enum.Enum Mimizu.Util.Color
 
 
@@ -261,6 +263,8 @@ modifyName :: String -> Maybe Player -> Maybe Player
 -- | The helper function for <a>MutablePlayerList</a>, it will modify the
 --   skin
 modifySkin :: [Color] -> Maybe Player -> Maybe Player
+instance GHC.Show.Show Mimizu.Player.Player
+instance GHC.Classes.Eq Mimizu.Player.Player
 
 
 module Mimizu.Food
@@ -287,6 +291,8 @@ getX :: Index -> FoodBlock -> Word8
 
 -- | compatibility funcction for getFoodX and getFoodY
 getY :: Index -> FoodBlock -> Word8
+instance GHC.Show.Show Mimizu.Food.FoodBlock
+instance GHC.Classes.Eq Mimizu.Food.FoodBlock
 
 
 module Mimizu
@@ -309,15 +315,22 @@ chatPort :: PortNumber
 
 -- | The callback function, this is called when message from
 --   <a>gamePort</a>.
-type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> (DashFlag, GameAngle)  The action you intend to be taken.
-type GameAngle = Word16  Must be in range 0 ~ 4096.
-type DashFlag = Bool  True if dash is on, False otherwise.
+type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> IO (DashFlag, GameAngle)  The action you intend to be taken.
+
+-- | Handler.
+type ErrorHandler = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> String  The message of error thrown -> IO ()
+
+-- | Must be in range 0 ~ 4095.
+type GameAngle = Word16
+
+-- | True if dash is on, False otherwise.
+type DashFlag = Bool
 
 -- | A list/map of players, Nothing if the player for that Index is not
 --   being played/dead.
 type MutablePlayerList = [(Index, IORef (Maybe Player))]
 
--- | A list/map of foods, Index represents the block.
+-- | A list/map of food blocks.
 type MutableFoodList = [(Index, IORef FoodBlock)]
 
 -- | Your ID for playing, the index is the key of MutablePlayerList.
@@ -325,21 +338,25 @@ type PlayerID = IORef Index
 
 -- | Convert to websocket acceptable form.
 convertToSendable :: (DashFlag, GameAngle) -> ByteString
-run :: GameReceiveCallback -> ClientApp ()
-mainLoop :: GameReceiveCallback -> IO ()
 
--- | Convert mutable list/map to immutable
+-- | The actual websocket handling function.
+run :: ErrorHandler -> GameReceiveCallback -> ClientApp ()
+
+-- | Entry point.
+mainLoop :: ErrorHandler -> GameReceiveCallback -> IO ()
+
+-- | Convert mutable list/map to immutable.
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
 
 -- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
 
 -- | Modify player list using parsed player other info for the specific
---   plaeyr
+--   plaeyr.
 parsePlayer :: MutablePlayerList -> Index -> [Word8] -> IO ()
 
 -- | Modify player list using pased action binary data for the specific
---   player
+--   player.
 parseAction :: MutablePlayerList -> Index -> [Word8] -> IO ()
 
 -- | Modify player list using parsed death info
@@ -348,7 +365,7 @@ parseDeath :: MutablePlayerList -> Index -> IO ()
 -- | Modify food list using parsed food info.
 parseFood :: MutableFoodList -> Index -> [Word8] -> IO ()
 
--- | Modify ist using parsed index value
+-- | Modify ist using parsed index value.
 parseNumber :: IORef Index -> Word8 -> IO ()
 
 -- | A tag for parsing data.
@@ -367,7 +384,10 @@ deathParseTag :: Word8
 numberParseTag :: Word8
 
 -- | parse binary data from <tt>gameSocket</tt>.
-parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO ()
+parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO (Either String ())
 
--- | parse text data from <tt>gameSocket</tt>
-parseSkinData :: MutablePlayerList -> Text -> IO ()
+-- | Modify player list using parsed text data from <tt>gameSocket</tt>.
+parseSkinData :: MutablePlayerList -> Text -> IO (Either String ())
+
+-- | Modify player specified by index in player list using specified tuple.
+parseNameSkin :: MutablePlayerList -> (Index, String, [Color]) -> IO ()
