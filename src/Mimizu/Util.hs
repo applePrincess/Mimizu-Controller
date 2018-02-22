@@ -90,7 +90,7 @@ data Color = NeonBlue          -- ^ The clolor of #3333ff
            | BeautyBush        -- ^ The clolor of #eebbbb
            | GoldenFizz        -- ^ The clolor of #eeee33
            | Whisper           -- ^ The clolor of #eeeeee
-           deriving Enum
+           deriving (Enum, Eq, Show)
 
 -- | Convert Color to CSS acceptable string
 colorToString :: Color -> String

@@ -24,7 +24,7 @@ data Player = Player { skin       :: [Color] -- ^ Skin information, a sequence o
                      , excreta    :: Word32  -- ^ Counter to be shorten
                      , act        :: Word16  -- ^ Recent action
                      , playerInfo :: [Word8] -- ^ Joints and other info
-                     }
+                     } deriving (Eq, Show)
 
 -- | A constructor-like function, compatibility for JS original source
 createPlayer :: [Word8] -> Player

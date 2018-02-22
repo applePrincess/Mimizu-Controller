@@ -10,7 +10,7 @@ Portability : portable
 -}
 module Framework where
 
-import           Control.Concurrent (forkIO)
+import           Control.Concurrent (forkIO, threadDelay)
 import           Control.Monad (forever, replicateM)
 import qualified Data.ByteString  as BS
 import           Data.ByteString.Lazy (unpack, toStrict)
@@ -44,10 +44,15 @@ type GameReceiveCallback =
   Index -- ^ The index of player you are currently playing.
   -> [(Index, Maybe Player)] -- ^ Current list of players, which may not be updated depending on the distance from you.
   -> [(Index, FoodBlock)] -- ^ Current list of food blocks, which may not be updated for the block where the block you are not in.
-  -> (DashFlag, GameAngle) -- ^ The action you intend to be taken.
+  -> IO (DashFlag, GameAngle) -- ^ The action you intend to be taken.
 
-type GameAngle = Word16 -- ^ Must be in range 0 ~ 4096.
-type DashFlag  = Bool   -- ^ True if dash is on, False otherwise.
+-- | Handler.
+type ErrorHandler = Index -> [(Index, Maybe Player)] -> [(Index, FoodBlock)] -> String -> IO ()
+
+-- | Must be in range 0 ~ 4096.
+type GameAngle = Word16
+-- | True if dash is on, False otherwise.
+type DashFlag  = Bool
 
 -- consider to use StorableArray Index a
 -- | A list\/map of players, Nothing if the player for that Index is not being played\/dead.
@@ -63,26 +68,43 @@ type PlayerID          = IORef Index
 convertToSendable :: (DashFlag, GameAngle) -> BS.ByteString
 convertToSendable (flg, ang) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
 
-
-run :: GameReceiveCallback -> ClientApp ()
-run cb conn = do
-  players <- zip [1::Index ..] <$> replicateM 0x100 (newIORef Nothing)           :: IO MutablePlayerList
-  foods    <- zip [1::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock [])) :: IO MutableFoodList
+-- | The actual websocket handling function.
+run :: ErrorHandler -> GameReceiveCallback -> ClientApp ()
+run handler cb conn = do
+  putStrLn "mainLoop Begins Here"
+  players <- zip [0::Index ..] <$> replicateM 0x100 (newIORef Nothing)           :: IO MutablePlayerList
+  foods    <- zip [0::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock [])) :: IO MutableFoodList
+  frameCount <- newIORef 0 :: IO (IORef Word16)
   playerIndex <- newIORef 0 :: IO PlayerID
-  sendTextData conn $ T.pack "yourPID"
+  putStrLn "data for the game initialized"
+  sendTextData conn $ T.pack "Your PID
+  putStrLn "My pid sent"
   _ <- forkIO $ forever $ do
     msg <- receiveDataMessage conn
-    case msg of
-      (Text t _)-> parseSkinData players (decodeUtf8 (toStrict t))
-      (Binary bs) -> parseGameData playerIndex players foods $ unpack bs
+    putStrLn $ "Message received: " ++ show msg
+    val <- case msg of
+             (Text t _)  -> parseSkinData players (decodeUtf8 (toStrict t))
+             (Binary bs) -> do
+               let h2 = take 2 (unpack bs)
+               writeIORef frameCount $ conv8To16 h2
+               parseGameData playerIndex players foods . drop 2 $ unpack bs
     players' <- pullIORefs players
     foods'   <- pullIORefs foods
     pid      <- readIORef playerIndex
-    sendBinaryData conn . convertToSendable $ cb pid players' foods'
-  forever (return ())
+    case val of
+      Left errString -> do
+        handler pid players' foods' errString
+        error "This socket is terminated."
+      Right _        -> do
+        act' <- cb pid  players' foods'
+        --sendBinaryData conn . convertToSendable =<< cb pid players' foods'
+        sendBinaryData conn $ convertToSendable act'
+        putStrLn $ "Binary data send: " ++ show act'
+  forever $ threadDelay 1000
 
-mainLoop :: GameReceiveCallback -> IO ()
-mainLoop cb = withSocketsDo $ runClient hostString (fromEnum gamePort) "/" (run cb)
+-- | Entry point
+mainLoop :: ErrorHandler -> GameReceiveCallback -> IO ()
+mainLoop handler cb = withSocketsDo $ runClient hostString (fromEnum gamePort) "/" (run handler cb)
   where hostString = toAddrString hostAddress
 
 
@@ -97,27 +119,35 @@ eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
 parsePlayer, parseAction  :: MutablePlayerList -> Index ->  [Word8] -> IO ()
 
 -- | Modify player list using pased action binary data for the specific player
-parseAction lst idx d = modifyIORef ref (modifyAction val)
+parseAction lst idx d = do
+  v <- readIORef ref
+  case v of
+    Nothing -> atomicWriteIORef ref . Just $ Player [] "" 0 val []
+    Just _  -> atomicModifyIORef' ref (\r -> (modifyAction val r, ()))
   where (Just ref) = lookup idx lst
         val        = conv8To16 d
 
 -- | Modify player list using parsed player other info for the specific plaeyr
-parsePlayer lst idx d = modifyIORef ref (modifyPlayerInfo d)
+parsePlayer lst idx d = do
+  v <- readIORef ref
+  case v of
+    Nothing -> atomicWriteIORef ref . Just $ createPlayer d
+    Just _  -> atomicModifyIORef' ref (\r -> (modifyPlayerInfo d r, ()))
   where Just ref = lookup idx lst
 
 -- | Modify player list using parsed death info
 parseDeath :: MutablePlayerList -> Index -> IO ()
-parseDeath lst idx = writeIORef ref Nothing
+parseDeath lst idx = atomicWriteIORef ref Nothing
   where Just ref = lookup idx lst
 
 -- | Modify food list using parsed food info.
 parseFood :: MutableFoodList  -> Index -> [Word8] -> IO ()
-parseFood lst idx d = writeIORef ref $ FoodBlock d
+parseFood lst idx d = atomicWriteIORef ref $ FoodBlock d
   where Just ref = lookup idx lst
 
 -- | Modify ist using parsed index value
 parseNumber :: IORef Index -> Word8 -> IO ()
-parseNumber ref idx = writeIORef ref (integralToIndex idx)
+parseNumber ref idx = atomicWriteIORef ref (integralToIndex idx)
 
 -- | A tag for parsing data.
 playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag :: Word8
@@ -129,43 +159,51 @@ deathParseTag  = intToWord8 $ fromEnum 'D'
 numberParseTag = intToWord8 $ fromEnum 'N'
 
 -- | parse binary data from 'gameSocket'.
-parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO ()
+parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO (Either String ())
 parseGameData pid players foods (x:xs) =
   if | x == playerParseTag -> do
-         let len = fromEnum $ head xs
-             idx = integralToIndex $ xs !! 1
-         parsePlayer players idx (take len (drop 2 xs))
-         parseGameData pid players foods $  drop (fromEnum len+1) xs
+         let idx = integralToIndex $ head xs
+             len = fromEnum $ xs!!1
+             len' = if len > 0 then (len + 1) * 8 + 6 else 8
+         parsePlayer players idx . take len' $ drop 2 xs
+         putStrLn $ "parsePlayerTag: " ++ show idx ++ "," ++ show len ++ "," ++ show len'
+         parseGameData pid players foods $  drop (fromEnum len'+2) xs
      | x == foodParseTag -> do
          let idx = integralToIndex . conv8To16 $ take 2 xs
              len = fromEnum $ xs !! 2
          parseFood foods idx . take (len*2) $ drop (2+1) xs
          parseGameData pid players foods $ drop (fromEnum len*2+1+2) xs
      | x == actionParseTag -> do
-         let len = fromEnum $ head xs
-             idx = integralToIndex $ xs !! 1
-         parseAction players idx (take (len*2) (tail xs))
-         parseGameData pid players foods $ drop (fromEnum len*2+1) xs
+         let idx = integralToIndex $ head xs
+         parseAction players idx (take 2 (tail xs))
+         parseGameData pid players foods $ drop (2+1) xs
      | x == numberParseTag -> do
          parseNumber pid (head xs)
          parseGameData pid players foods $ tail xs
      | x == deathParseTag -> do
          let idx = integralToIndex . fromEnum $ head xs
-         parseDeath players idx
-         parseGameData pid players foods $ tail xs
-
-parseGameData _ _ _ [] = return ()
-
+         pid' <- readIORef pid
+         if pid' == idx
+           then return $ Left "You are dead."
+           else (do
+           parseDeath players idx
+           parseGameData pid players foods $ tail xs)
+     | otherwise         -> error $ "Unrecognized tag found: " ++ show x
+parseGameData _ _ _ [] = return $ Right ()
 
 -- | parse text data from 'gameSocket'
-parseSkinData :: MutablePlayerList -> T.Text -> IO ()
+parseSkinData :: MutablePlayerList -> T.Text -> IO (Either String ())
 parseSkinData lst txt = do
   let triplets = makeTriplets txt
-  -- assume the triplets are formed as [(Index, Name, Skin)]
-  mapM_ (\(idx, n, s) -> do
-            let ref = lookup idx lst
-            case ref of
-              Nothing -> return ()
-              Just vRef -> do
-                modifyIORef vRef (modifyName n)
-                modifyIORef vRef (modifySkin s)) triplets
+  mapM_ (modifyNameSkin lst) triplets
+  return $ Right ()
+
+modifyNameSkin :: MutablePlayerList -> (Index, String, [Color]) -> IO ()
+modifyNameSkin lst (idx, n, s) = do
+  let Just ref = lookup idx lst
+  v <- readIORef ref
+  case v of
+    Nothing -> atomicWriteIORef ref . Just $ Player s n 0 0 []
+    Just _  -> do
+      atomicModifyIORef' ref (\r -> (modifyName n r,()))
+      atomicModifyIORef' ref (\r -> (modifySkin s r, ()))

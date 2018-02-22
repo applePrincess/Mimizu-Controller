@@ -20,4 +20,9 @@ dependencies:
 library:
   source-dirs: src
 
-  
+executables:
+  mimizu:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - mimizu

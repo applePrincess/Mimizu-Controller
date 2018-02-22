@@ -15,7 +15,7 @@ import Data.Bits (shiftR, (.&.))
 import Mimizu.Util
 
 -- | The food info contained by one block.
-newtype FoodBlock = FoodBlock {foodInfo :: [Word8]}
+newtype FoodBlock = FoodBlock {foodInfo :: [Word8]} deriving (Eq, Show)
 
 -- | color to be displayed
 getColor :: Index -> FoodBlock -> Color
