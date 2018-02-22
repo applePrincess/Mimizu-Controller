@@ -9,11 +9,11 @@ Portability : portable
 -}
 module Mimizu.Player where
 
-import Data.Bits (shiftR, (.&.))
-import Data.Int (Int32)
-import Data.Word (Word8, Word16, Word32)
+import           Data.Bits   (shiftR, (.&.))
+import           Data.Int    (Int32)
+import           Data.Word   (Word16, Word32, Word8)
 
-import Mimizu.Util
+import           Mimizu.Util
 
 -- | The type of the length
 type Length = Word32

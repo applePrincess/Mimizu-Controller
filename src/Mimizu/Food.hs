@@ -9,10 +9,10 @@ Portability : portable
 
 module Mimizu.Food where
 
-import Data.Word (Word8)
-import Data.Bits (shiftR, (.&.))
+import           Data.Bits   (shiftR, (.&.))
+import           Data.Word   (Word8)
 
-import Mimizu.Util
+import           Mimizu.Util
 
 -- | The food info contained by one block.
 newtype FoodBlock = FoodBlock {foodInfo :: [Word8]} deriving (Eq, Show)

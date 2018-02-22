@@ -24,14 +24,14 @@ module Mimizu.Util
   , makeTriplets
   , makeColors ) where
 
-import Data.Bits (shiftL, shiftR, (.&.))
-import Data.Function ((&))
-import Data.Word (Word8, Word16, Word32)
-import  Numeric (readHex)
+import           Data.Bits     (shiftL, shiftR, (.&.))
+import           Data.Function ((&))
+import           Data.Word     (Word16, Word32, Word8)
+import           Numeric       (readHex)
 
-import Unsafe.Coerce
+import           Unsafe.Coerce
 
-import Data.Text (pack, splitOn, Text, intercalate, unpack)
+import           Data.Text     (Text, intercalate, pack, splitOn, unpack)
 
 -- | Convert from raw websocket data to Uint16
 conv8To16 :: [Word8] -> Word16

@@ -8,12 +8,12 @@ Portability : portable
 -}
 module Mimizu.Chat where
 
-import Data.Time.Clock
+import           Data.Time.Clock
 
 -- | The representation of one message
-data Chat = Chat { origin :: Origin  -- ^ The origin of message
-                 , time :: UTCTime   -- ^ The time (Internally in UTC, Externally in JST)
-                 , sender :: String  -- ^ The display name of sender the message sent by
+data Chat = Chat { origin  :: Origin  -- ^ The origin of message
+                 , time    :: UTCTime   -- ^ The time (Internally in UTC, Externally in JST)
+                 , sender  :: String  -- ^ The display name of sender the message sent by
                  , message :: String -- ^ The actual message
                  }
 

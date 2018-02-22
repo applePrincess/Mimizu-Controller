@@ -12,7 +12,7 @@ module Mimizu
   , module Mimizu.Food
   , module Mimizu.Chat) where
 
-import Mimizu.Player hiding (getX, getY)
-import Mimizu.Util
-import Mimizu.Food hiding (getX, getY)
-import Mimizu.Chat
+import           Mimizu.Chat
+import           Mimizu.Food   hiding (getX, getY)
+import           Mimizu.Player hiding (getX, getY)
+import           Mimizu.Util

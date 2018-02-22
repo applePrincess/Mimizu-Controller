@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MultiWayIf    #-}
 {-# LANGUAGE TupleSections #-}
 {-|
 Module      : Framework
@@ -10,20 +10,20 @@ Portability : portable
 -}
 module Framework where
 
-import           Control.Concurrent (forkIO, threadDelay)
-import           Control.Monad (forever, replicateM)
-import qualified Data.ByteString  as BS
-import           Data.ByteString.Lazy (unpack, toStrict)
-import           Data.Bits (shiftL, (.&.), (.|.))
+import           Control.Concurrent   (forkIO, threadDelay)
+import           Control.Monad        (forever, replicateM)
+import           Data.Bits            (shiftL, (.&.), (.|.))
+import qualified Data.ByteString      as BS
+import           Data.ByteString.Lazy (toStrict, unpack)
 import           Data.IORef
-import qualified Data.Text as T
-import           Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text            as T
+import           Data.Text.Encoding   (decodeUtf8)
 import           Data.Word
 
-import Network.Socket
-import Network.WebSockets
+import           Network.Socket
+import           Network.WebSockets
 
-import Mimizu
+import           Mimizu
 
 -- | The destination IP address the socket connects to, in the form of Word8 quadruplet.
 hostAddress :: (Word8, Word8, Word8, Word8)
@@ -96,10 +96,7 @@ run handler cb conn = do
       Left errString -> do
         handler pid players' foods' errString
         error "This socket is terminated."
-      Right _        -> do
-        act' <- cb pid  players' foods'
-        --sendBinaryData conn . convertToSendable =<< cb pid players' foods'
-        sendBinaryData conn $ convertToSendable act'
+      Right _        -> sendBinaryData conn . convertToSendable =<< cb pid  players' foods'
   forever $ threadDelay 1000
 
 -- | Entry point.
