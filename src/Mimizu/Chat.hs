@@ -6,9 +6,17 @@ Maintainer  : Apple Princess
 Stability   : experimental
 Portability : portable
 -}
-module Mimizu.Chat where
+module Mimizu.Chat
+  ( Chat(..)
+  , Origin(..)
+  , toOriginString
+  , fromOriginString
+  , fromTimeString )where
+
+import           Data.List (unfoldr)
 
 import           Data.Time.Clock
+
 
 -- | The representation of one message
 data Chat = Chat { origin  :: Origin  -- ^ The origin of message
@@ -34,3 +42,15 @@ fromOriginString "NN" = NicoNico
 fromOriginString "TU" = TUGame
 fromOriginString "YT" = YouTube
 fromOriginString x    = error $ "Unrecognized string found: " ++ x
+
+-- assume the argument is formatted as hh:mm:ss and in 24h format
+fromTimeString :: String -> IO UTCTime
+fromTimeString str = do
+  currTime <- getCurrentTime
+  let day = utctDay currTime
+  return $ UTCTime day dayTime
+  where [hhStr,mmStr,ssStr] = unfoldr (\x -> if null x then Nothing else Just . fmap (drop 1) $ break (== ':') x) str
+        hh = (read hhStr - 9 + 24) `mod` 24:: Int
+        mm = read mmStr :: Int
+        ss = read ssStr :: Int
+        dayTime = toEnum $ hh * 3600 + mm * 60 + ss

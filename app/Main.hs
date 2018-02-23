@@ -15,9 +15,14 @@ gameReceive ref pid players foods = do
 errorHandler :: ErrorHandler
 errorHandler pid plyaers foods = putStrLn
 
+chatCallback :: ChatCallback
+chatCallback = undefined
+
+-- mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> IO ()
+
 main :: IO ()
 main = do
+  putStrLn "What is your pid? "
+  pid <- getLine
   ref <- newIORef 0 :: IO (IORef Int)
-  putStrLn "counter initialized"
-  mainLoop errorHandler (gameReceive ref)
-  putStrLn "main ends here."
+  mainLoop pid errorHandler (gameReceive ref) chatCallback

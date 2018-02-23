@@ -42,6 +42,7 @@ toOriginString :: Origin -> String
 
 -- | convert origin string to its Enum value
 fromOriginString :: String -> Origin
+fromTimeString :: String -> IO UTCTime
 
 
 module Mimizu.Util
@@ -313,12 +314,16 @@ gamePort :: PortNumber
 -- | The port number the socket accepts.
 chatPort :: PortNumber
 
--- | The callback function, this is called when message from
+-- | The callback function, this is called when message received from
 --   <a>gamePort</a>.
 type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> IO (DashFlag, GameAngle)  The action you intend to be taken.
 
 -- | Handler.
 type ErrorHandler = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> String  The message of error thrown -> IO ()
+
+-- | The callback function, this is called when message received from
+--   <a>chatPort</a>
+type ChatCallback = [Chat]  Chats recieved, including the latest -> IO Text  The message you want to send, if it is empty sending will not be fired.
 
 -- | Must be in range 0 ~ 4095.
 type GameAngle = Word16
@@ -338,12 +343,6 @@ type PlayerID = IORef Index
 
 -- | Convert to websocket acceptable form.
 convertToSendable :: (DashFlag, GameAngle) -> ByteString
-
--- | The actual websocket handling function.
-run :: ErrorHandler -> GameReceiveCallback -> ClientApp ()
-
--- | Entry point.
-mainLoop :: ErrorHandler -> GameReceiveCallback -> IO ()
 
 -- | Convert mutable list/map to immutable.
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
@@ -391,3 +390,15 @@ parseSkinData :: MutablePlayerList -> Text -> IO (Either String ())
 
 -- | Modify player specified by index in player list using specified tuple.
 parseNameSkin :: MutablePlayerList -> (Index, String, [Color]) -> IO ()
+
+-- | Parse Text into Chat so that you can manimupate easily.
+parseChat :: Text -> IO Chat
+
+-- | The actual websocket handling function for <a>gamePort</a>.
+run :: String -> ErrorHandler -> GameReceiveCallback -> ClientApp ()
+
+-- | The actual websocket handling functin for <a>chatPort</a>.
+runChat :: String -> ChatCallback -> ClientApp ()
+
+-- | Entry point.
+mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> IO ()

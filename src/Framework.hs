@@ -11,7 +11,7 @@ Portability : portable
 module Framework where
 
 import           Control.Concurrent   (forkIO, threadDelay)
-import           Control.Monad        (forever, replicateM)
+import           Control.Monad        (forever, replicateM, unless)
 import           Data.Bits            (shiftL, (.&.), (.|.))
 import qualified Data.ByteString      as BS
 import           Data.ByteString.Lazy (toStrict, unpack)
@@ -33,13 +33,12 @@ hostAddress = (160, 16, 82, 222)
 toAddrString :: (Word8, Word8, Word8, Word8) -> String
 toAddrString (x, y, z, w) = show x ++ "." ++ show y ++ "." ++ show z ++ "." ++ show w
 
-
 -- | The port number the socket accepts.
 gamePort, chatPort :: PortNumber
 gamePort = 8888
 chatPort = 8891
 
--- | The callback function, this is called when message from 'gamePort'.
+-- | The callback function, this is called when message received from 'gamePort'.
 type GameReceiveCallback =
   Index -- ^ The index of player you are currently playing.
   -> [(Index, Maybe Player)] -- ^ Current list of players, which may not be updated depending on the distance from you.
@@ -53,6 +52,11 @@ type ErrorHandler =
   -> [(Index, FoodBlock)] -- ^ Current list of food blocks, which may not be updated for the block where the block you are not in.
   -> String -- ^ The message of error thrown
   -> IO ()
+
+-- | The callback function, this is called when message received from 'chatPort'
+type ChatCallback =
+  [Chat] -- ^ Chats recieved, including the latest
+  -> IO T.Text -- ^ The message you want to send, if it is empty sending will not be fired.
 
 -- | Must be in range 0 ~ 4095.
 type GameAngle = Word16
@@ -72,38 +76,6 @@ type PlayerID          = IORef Index
 -- | Convert to websocket acceptable form.
 convertToSendable :: (DashFlag, GameAngle) -> BS.ByteString
 convertToSendable (flg, ang) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
-
--- | The actual websocket handling function.
-run :: ErrorHandler -> GameReceiveCallback -> ClientApp ()
-run handler cb conn = do
-  players <- zip [0::Index ..] <$> replicateM 0x100 (newIORef Nothing)           :: IO MutablePlayerList
-  foods    <- zip [0::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock [])) :: IO MutableFoodList
-  frameCount <- newIORef 0 :: IO (IORef Word16)
-  playerIndex <- newIORef 0 :: IO PlayerID
-  sendTextData conn $ T.pack "Your PID"
-  _ <- forkIO $ forever $ do
-    msg <- receiveDataMessage conn
-    val <- case msg of
-             (Text t _)  -> parseSkinData players (decodeUtf8 (toStrict t))
-             (Binary bs) -> do
-               let h2 = take 2 (unpack bs)
-               writeIORef frameCount $ conv8To16 h2
-               parseGameData playerIndex players foods . drop 2 $ unpack bs
-    players' <- pullIORefs players
-    foods'   <- pullIORefs foods
-    pid      <- readIORef playerIndex
-    case val of
-      Left errString -> do
-        handler pid players' foods' errString
-        error "This socket is terminated."
-      Right _        -> sendBinaryData conn . convertToSendable =<< cb pid  players' foods'
-  forever $ threadDelay 1000
-
--- | Entry point.
-mainLoop :: ErrorHandler -> GameReceiveCallback -> IO ()
-mainLoop handler cb = withSocketsDo $ runClient hostString (fromEnum gamePort) "/" (run handler cb)
-  where hostString = toAddrString hostAddress
-
 
 -- | Convert mutable list\/map to immutable.
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
@@ -204,3 +176,65 @@ parseNameSkin lst (idx, n, s) = do
     Just _  -> do
       atomicModifyIORef' ref (\r -> (modifyName n r,()))
       atomicModifyIORef' ref (\r -> (modifySkin s r, ()))
+
+
+-- | Parse Text into Chat so that you can manimupate easily.
+parseChat :: T.Text -> IO Chat
+parseChat msg = do
+  utcTime  <- fromTimeString $ T.unpack ts
+  return $ Chat (fromOriginString $ T.unpack orig) utcTime
+    (T.unpack n) (T.unpack $ T.concat ms)
+  where (orig:ts:n:ms)  = T.splitOn (T.pack "\t") msg
+
+-- | The actual websocket handling function for 'gamePort'.
+run :: String -> ErrorHandler -> GameReceiveCallback -> ClientApp ()
+run sid handler cb conn = do
+  players <- zip [0::Index ..] <$> replicateM 0x100 (newIORef Nothing)           :: IO MutablePlayerList
+  foods    <- zip [0::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock [])) :: IO MutableFoodList
+  frameCount <- newIORef 0 :: IO (IORef Word16)
+  playerIndex <- newIORef 0 :: IO PlayerID
+  sendTextData conn $ T.pack sid
+  _ <- forkIO $ forever $ do
+    msg <- receiveDataMessage conn
+    val <- case msg of
+             (Text t _)  -> parseSkinData players (decodeUtf8 (toStrict t))
+             (Binary bs) -> do
+               let h2 = take 2 (unpack bs)
+               writeIORef frameCount $ conv8To16 h2
+               parseGameData playerIndex players foods . drop 2 $ unpack bs
+    players' <- pullIORefs players
+    foods'   <- pullIORefs foods
+    pid      <- readIORef playerIndex
+    case val of
+      Left errString -> do
+        handler pid players' foods' errString
+        error "This socket is terminated."
+      Right _        -> sendBinaryData conn . convertToSendable =<< cb pid  players' foods'
+  forever $ threadDelay 1000
+
+-- | The actual websocket handling functin for 'chatPort'.
+runChat :: String -> ChatCallback -> ClientApp ()
+runChat sid cb conn = do
+  chats <- newIORef [] :: IO (IORef [Chat])
+  sendTextData conn . T.pack $ sid ++ "\tCHAT"
+  _ <- forkIO $ forever $ do
+    msg <- receiveData conn :: IO T.Text
+    c   <- parseChat msg
+    atomicModifyIORef' chats (\x -> (x ++ [c], ()))
+    sendChat chats
+  forever $ do
+    sendChat chats
+    threadDelay 1000
+  where sendChat :: IORef [Chat] -> IO ()
+        sendChat chats = do
+          chats' <- readIORef chats
+          newChat <- cb chats'
+          unless (T.null newChat) $ sendTextData conn newChat
+
+-- | Entry point.
+mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> IO ()
+mainLoop sid handler cbGame cbChat = withSocketsDo $ do
+  _ <- forkIO $ runClient hostString (fromEnum gamePort) "/" (run sid handler cbGame)
+  _ <- forkIO $ runClient hostString (fromEnum chatPort) "/" (runChat sid cbChat)
+  forever $ threadDelay 1000000
+  where hostString = toAddrString hostAddress
