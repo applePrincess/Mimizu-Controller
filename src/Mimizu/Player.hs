@@ -11,6 +11,7 @@ module Mimizu.Player where
 
 import           Data.Bits   (shiftR, (.&.))
 import           Data.Int    (Int32)
+import           Data.List   (sortBy)
 import           Data.Word   (Word16, Word32, Word8)
 
 import           Mimizu.Util
@@ -128,7 +129,6 @@ getX, getY :: Index -> Player -> Float
 getX = getJointX
 getY = getJointY
 
-
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the player info.
 modifyPlayerInfo :: [Word8] -> Maybe Player -> Maybe Player
 modifyPlayerInfo d = maybe Nothing (\(Player s n e a _) ->  Just $ Player s n e a d)
@@ -148,3 +148,27 @@ modifyName d = maybe Nothing (\(Player s _ e a p) ->  Just $ Player s d e a p)
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
 modifySkin :: [Color] -> Maybe Player -> Maybe Player
 modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)
+
+-- In Euclidean distance
+headDistance :: Player -> Player -> Float
+headDistance p1 p2 = sqrt $ (p1x - p2x) ** 2 + (p1y - p2y) ** 2
+  where p1x = case getX0 p1 of
+                Left val -> fromIntegral val
+                Right val -> val
+        p1y = case getY0 p1 of
+                Left val -> fromIntegral val
+                Right val -> val
+        p2x = case getX0 p2 of
+                Left val -> fromIntegral val
+                Right val -> val
+        p2y = case getY0 p2 of
+                Left val -> fromIntegral val
+                Right val -> val
+
+compareByRanking :: Player -> Player -> Ordering
+compareByRanking x y = compare vx vy
+  where vx = getVol x
+        vy = getVol y
+
+sortByRanking  :: [Player] -> [Player]
+sortByRanking = sortBy compareByRanking

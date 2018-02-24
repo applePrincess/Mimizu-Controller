@@ -213,28 +213,33 @@ run sid handler cb conn = do
   forever $ threadDelay 1000
 
 -- | The actual websocket handling functin for 'chatPort'.
-runChat :: String -> ChatCallback -> ClientApp ()
-runChat sid cb conn = do
+runChat :: String -> ChatCallback -> ChatCallback -> ClientApp ()
+runChat sid cb chatSend conn = do
   chats <- newIORef [] :: IO (IORef [Chat])
   sendTextData conn . T.pack $ sid ++ "\tCHAT"
   _ <- forkIO $ forever $ do
     msg <- receiveData conn :: IO T.Text
     c   <- parseChat msg
     atomicModifyIORef' chats (\x -> (x ++ [c], ()))
-    sendChat chats
+    sendChat chats cb
   forever $ do
-    sendChat chats
+    sendChat chats chatSend
     threadDelay 1000
-  where sendChat :: IORef [Chat] -> IO ()
-        sendChat chats = do
+  where sendChat :: IORef [Chat] -> ChatCallback -> IO ()
+        sendChat chats cb' = do
           chats' <- readIORef chats
-          newChat <- cb chats'
+          newChat <- cb' chats'
           unless (T.null newChat) $ sendTextData conn newChat
 
 -- | Entry point.
-mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> IO ()
-mainLoop sid handler cbGame cbChat = withSocketsDo $ do
+mainLoop :: String -- ^ The session id you want to play.
+  -> ErrorHandler -- ^ The callback, which will be called when error occured.
+  -> GameReceiveCallback -- ^ The callback, which will be called when any new message from game received.
+  -> ChatCallback -- ^ The callback, which will be called when any new message from chat received.
+  -> ChatCallback -- ^ The function, which will be called every 1s, so that you can actively send.
+  -> IO ()
+mainLoop sid handler cbGame cbChat chatSend = withSocketsDo $ do
   _ <- forkIO $ runClient hostString (fromEnum gamePort) "/" (run sid handler cbGame)
-  _ <- forkIO $ runClient hostString (fromEnum chatPort) "/" (runChat sid cbChat)
-  forever $ threadDelay 1000000
+  _ <- forkIO $ runClient hostString (fromEnum chatPort) "/" (runChat sid cbChat chatSend)
+  forever $ threadDelay 1000
   where hostString = toAddrString hostAddress

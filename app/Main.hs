@@ -1,6 +1,9 @@
 module Main (main) where
 
 import Data.IORef
+
+import qualified Data.Text as T
+
 import Framework
 -- import Mimizu
 
@@ -16,13 +19,14 @@ errorHandler :: ErrorHandler
 errorHandler pid plyaers foods = putStrLn
 
 chatCallback :: ChatCallback
-chatCallback = undefined
+chatCallback chat = return $ T.pack ""
 
--- mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> IO ()
+sendingFunction :: ChatCallback
+sendingFunction chat = T.pack <$> getLine
 
 main :: IO ()
 main = do
   putStrLn "What is your pid? "
   pid <- getLine
   ref <- newIORef 0 :: IO (IORef Int)
-  mainLoop pid errorHandler (gameReceive ref) chatCallback
+  mainLoop pid errorHandler (gameReceive ref) chatCallback chatCallback
