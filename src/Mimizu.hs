@@ -30,7 +30,7 @@ nearestFood pl block = head . sortByFoodDistance pl $ convertCoordinateInfo f
         f   = block !!(by * 0x100 + bx)
 
 foodDistance :: Player -> Food -> Float
-foodDistance pl f = sqrt $ (fx - plx) ^^ 2 + (fy - ply) ^^ 2
+foodDistance pl f = sqrt $ (fx - plx) ** 2 + (fy - ply) ** 2
   where fx = fromIntegral $ fst f * 0x10
         fy = fromIntegral $ snd f * 0x10
         plx = getJointX 0 pl

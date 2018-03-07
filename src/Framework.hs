@@ -10,7 +10,7 @@ Portability : portable
 -}
 module Framework where
 
-import           Control.Concurrent   (forkIO, threadDelay)
+import           Control.Concurrent   (forkIO, threadDelay, MVar, newEmptyMVar, takeMVar, putMVar, forkFinally, killThread)
 import           Control.Monad        (forever, replicateM, unless)
 import           Data.Bits            (shiftL, (.&.), (.|.))
 import qualified Data.ByteString      as BS
@@ -56,6 +56,7 @@ type ErrorHandler =
 -- | The callback function, this is called when message received from 'chatPort'
 type ChatCallback =
   [Chat] -- ^ Chats recieved, including the latest
+  -> Ranking -- ^ The ranking
   -> IO T.Text -- ^ The message you want to send, if it is empty sending will not be fired.
 
 -- | Must be in range 0 ~ 4095.
@@ -73,6 +74,8 @@ type MutableFoodList   = [(Index, IORef FoodBlock)]
 -- | Your ID for playing, the index is the key of MutablePlayerList.
 type PlayerID          = IORef Index
 
+-- | High score of the day (when you started to play)
+type Ranking           = [(String, Word32)]
 -- | Convert to websocket acceptable form.
 convertToSendable :: (DashFlag, GameAngle) -> BS.ByteString
 convertToSendable (flg, ang) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
@@ -177,7 +180,6 @@ parseNameSkin lst (idx, n, s) = do
       atomicModifyIORef' ref (\r -> (modifyName n r,()))
       atomicModifyIORef' ref (\r -> (modifySkin s r, ()))
 
-
 -- | Parse Text into Chat so that you can manimupate easily.
 parseChat :: T.Text -> IO Chat
 parseChat msg = do
@@ -186,14 +188,20 @@ parseChat msg = do
     (T.unpack n) (T.unpack $ T.concat ms)
   where (orig:ts:n:ms)  = T.splitOn (T.pack "\t") msg
 
+parseRanking :: T.Text -> Ranking
+parseRanking msg = parseRank . tail $ T.words msg
+  where parseRank (name:score:others) = (T.unpack name, read $ T.unpack score) : parseRank others
+        parseRank []                  = []
+
 -- | The actual websocket handling function for 'gamePort'.
-run :: String -> ErrorHandler -> GameReceiveCallback -> ClientApp ()
-run sid handler cb conn = do
+run :: String -> ErrorHandler -> GameReceiveCallback -> MVar () -> ClientApp ()
+run sid handler cb mv conn = do
   players <- zip [0::Index ..] <$> replicateM 0x100 (newIORef Nothing)           :: IO MutablePlayerList
   foods    <- zip [0::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock [])) :: IO MutableFoodList
   frameCount <- newIORef 0 :: IO (IORef Word16)
   playerIndex <- newIORef 0 :: IO PlayerID
   sendTextData conn $ T.pack sid
+  mv' <- newEmptyMVar
   _ <- forkIO $ forever $ do
     msg <- receiveDataMessage conn
     val <- case msg of
@@ -208,27 +216,32 @@ run sid handler cb conn = do
     case val of
       Left errString -> do
         handler pid players' foods' errString
-        error "This socket is terminated."
+        putMVar mv' ()
       Right _        -> sendBinaryData conn . convertToSendable =<< cb pid  players' foods'
-  forever $ threadDelay 1000
+  takeMVar mv'
+  putMVar mv ()
 
 -- | The actual websocket handling functin for 'chatPort'.
 runChat :: String -> ChatCallback -> ChatCallback -> ClientApp ()
 runChat sid cb chatSend conn = do
   chats <- newIORef [] :: IO (IORef [Chat])
+  ranking <- newIORef [] :: IO (IORef Ranking)
   sendTextData conn . T.pack $ sid ++ "\tCHAT"
+  rText <- receiveData conn :: IO T.Text
+  atomicWriteIORef ranking (parseRanking rText)
   _ <- forkIO $ forever $ do
     msg <- receiveData conn :: IO T.Text
     c   <- parseChat msg
     atomicModifyIORef' chats (\x -> (x ++ [c], ()))
-    sendChat chats cb
+    sendChat chats ranking cb
   forever $ do
-    sendChat chats chatSend
+    sendChat chats ranking chatSend
     threadDelay 1000
-  where sendChat :: IORef [Chat] -> ChatCallback -> IO ()
-        sendChat chats cb' = do
+  where sendChat :: IORef [Chat] -> IORef Ranking -> ChatCallback -> IO ()
+        sendChat chats ranking cb' = do
           chats' <- readIORef chats
-          newChat <- cb' chats'
+          ranking' <- readIORef ranking
+          newChat <- cb' chats' ranking'
           unless (T.null newChat) $ sendTextData conn newChat
 
 -- | Entry point.
@@ -237,9 +250,15 @@ mainLoop :: String -- ^ The session id you want to play.
   -> GameReceiveCallback -- ^ The callback, which will be called when any new message from game received.
   -> ChatCallback -- ^ The callback, which will be called when any new message from chat received.
   -> ChatCallback -- ^ The function, which will be called every 1s, so that you can actively send.
+  -> Bool         -- ^ The flag, True if run this thread again, False otherwise.
   -> IO ()
-mainLoop sid handler cbGame cbChat chatSend = withSocketsDo $ do
-  _ <- forkIO $ runClient hostString (fromEnum gamePort) "/" (run sid handler cbGame)
-  _ <- forkIO $ runClient hostString (fromEnum chatPort) "/" (runChat sid cbChat chatSend)
-  forever $ threadDelay 1000
+mainLoop sid handler cbGame cbChat chatSend isForever = withSocketsDo $ do
+  mv <- newEmptyMVar
+  gameThreadID <- forkFinally (startClient gamePort (run sid handler cbGame mv)) (\_ -> return ())
+  chatThreadID <- forkFinally (startClient chatPort (runChat sid cbChat chatSend)) (\_ -> return ())
+  _ <- takeMVar mv
+  killThread gameThreadID
+  killThread chatThreadID
+  if isForever then mainLoop sid handler cbGame cbChat chatSend isForever else return ()
   where hostString = toAddrString hostAddress
+        startClient pt func = runClient hostString (fromEnum pt) "/" func

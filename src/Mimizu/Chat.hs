@@ -29,7 +29,7 @@ data Chat = Chat { origin  :: Origin  -- ^ The origin of message
 -- | The representation of origin where a message come from
 data Origin = NicoNico -- ^ NicoNico live stream. See <http://com.nicovideo.jp/community/co3265652>
             | TUGame   -- ^ TUGame original site. See <http://tk2-217-18218.vs.sakura.ne.jp>
-            | YouTube  -- ^ YouTube live stream. See <https://www.youtube.com/user/TsUmezawa>
+            | YouTube  -- ^ YouTube live stream. See <https://www.youtube.com/channel/UCzXL5v5_-L-s4cDhK3I35Dg>
             | TwitCasting -- ^ Twitcasting live stream. See <https://twitcasting.tv/c:t_umezawa>
             deriving Show
 
