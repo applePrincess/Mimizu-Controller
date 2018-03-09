@@ -473,5 +473,8 @@ pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
 -- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
 
+-- | Convert radians (which must be in range (-pi, pi].
+fromRadian :: Double -> GameAngle
+
 -- | Entry point.
 mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> ChatCallback -> Bool -> IO ()

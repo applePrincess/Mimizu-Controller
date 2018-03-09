@@ -24,6 +24,7 @@ module Framework
   , convertToSendable
   , pullIORefs
   , eliminateIORef
+  , fromRadian
   , mainLoop ) where
 
 import           Control.Concurrent   (forkIO, threadDelay, MVar, newEmptyMVar, takeMVar, putMVar, forkFinally, killThread)
@@ -104,6 +105,12 @@ pullIORefs = mapM eliminateIORef
 -- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
 eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
+
+-- | Convert radians (which must be in range (-pi, pi].
+fromRadian :: Double -> GameAngle
+fromRadian ang | ang < 0   = a .|. 0x1000
+               | otherwise = a
+  where a = floor (ang / pi) `shiftL` 12
 
 parsePlayer, parseAction  :: MutablePlayerList -> Index ->  [Word8] -> IO ()
 
