@@ -1,0 +1,89 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><a name="line-2"></a><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables #-}</span><span>
+</span><a name="line-3"></a><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span>
+</span><a name="line-4"></a><span>    </span><span class="hs-special">(</span><span> </span><span class="hs-comment">-- * Incoming connections and handshaking</span><span>
+</span><a name="line-5"></a><span>      </span><a href="Network.WebSockets.Connection.html#PendingConnection"><span class="hs-identifier hs-type">PendingConnection</span></a><span>
+</span><a name="line-6"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#pendingRequest"><span class="hs-identifier hs-var">pendingRequest</span></a><span>
+</span><a name="line-7"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#acceptRequest"><span class="hs-identifier hs-var">acceptRequest</span></a><span>
+</span><a name="line-8"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#AcceptRequest"><span class="hs-identifier hs-type">AcceptRequest</span></a><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-9"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#defaultAcceptRequest"><span class="hs-identifier hs-var">defaultAcceptRequest</span></a><span>
+</span><a name="line-10"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#acceptRequestWith"><span class="hs-identifier hs-var">acceptRequestWith</span></a><span>
+</span><a name="line-11"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#rejectRequest"><span class="hs-identifier hs-var">rejectRequest</span></a><span>
+</span><a name="line-12"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#RejectRequest"><span class="hs-identifier hs-type">RejectRequest</span></a><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-13"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#defaultRejectRequest"><span class="hs-identifier hs-var">defaultRejectRequest</span></a><span>
+</span><a name="line-14"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#rejectRequestWith"><span class="hs-identifier hs-var">rejectRequestWith</span></a><span>
+</span><a name="line-15"></a><span>
+</span><a name="line-16"></a><span>      </span><span class="hs-comment">-- * Main connection type</span><span>
+</span><a name="line-17"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#Connection"><span class="hs-identifier hs-type">Connection</span></a><span>
+</span><a name="line-18"></a><span>
+</span><a name="line-19"></a><span>      </span><span class="hs-comment">-- * Options for connections</span><span>
+</span><a name="line-20"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#ConnectionOptions"><span class="hs-identifier hs-type">ConnectionOptions</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-21"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#defaultConnectionOptions"><span class="hs-identifier hs-var">defaultConnectionOptions</span></a><span>
+</span><a name="line-22"></a><span>
+</span><a name="line-23"></a><span>      </span><span class="hs-comment">-- ** Compression options</span><span>
+</span><a name="line-24"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#CompressionOptions"><span class="hs-identifier hs-type">CompressionOptions</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-25"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#PermessageDeflate"><span class="hs-identifier hs-type">PermessageDeflate</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-26"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#defaultPermessageDeflate"><span class="hs-identifier hs-var">defaultPermessageDeflate</span></a><span>
+</span><a name="line-27"></a><span>
+</span><a name="line-28"></a><span>      </span><span class="hs-comment">-- ** Protection limits</span><span>
+</span><a name="line-29"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.Options.html#SizeLimit"><span class="hs-identifier hs-type">SizeLimit</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-30"></a><span>
+</span><a name="line-31"></a><span>      </span><span class="hs-comment">-- * Sending and receiving messages</span><span>
+</span><a name="line-32"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#receive"><span class="hs-identifier hs-var">receive</span></a><span>
+</span><a name="line-33"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#receiveDataMessage"><span class="hs-identifier hs-var">receiveDataMessage</span></a><span>
+</span><a name="line-34"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#receiveData"><span class="hs-identifier hs-var">receiveData</span></a><span>
+</span><a name="line-35"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#send"><span class="hs-identifier hs-var">send</span></a><span>
+</span><a name="line-36"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendDataMessage"><span class="hs-identifier hs-var">sendDataMessage</span></a><span>
+</span><a name="line-37"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendTextData"><span class="hs-identifier hs-var">sendTextData</span></a><span>
+</span><a name="line-38"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendTextDatas"><span class="hs-identifier hs-var">sendTextDatas</span></a><span>
+</span><a name="line-39"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendBinaryData"><span class="hs-identifier hs-var">sendBinaryData</span></a><span>
+</span><a name="line-40"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendClose"><span class="hs-identifier hs-var">sendClose</span></a><span>
+</span><a name="line-41"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#sendPing"><span class="hs-identifier hs-var">sendPing</span></a><span>
+</span><a name="line-42"></a><span>
+</span><a name="line-43"></a><span>      </span><span class="hs-comment">-- * HTTP Types</span><span>
+</span><a name="line-44"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#Headers"><span class="hs-identifier hs-type">Headers</span></a><span>
+</span><a name="line-45"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#Request"><span class="hs-identifier hs-type">Request</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-46"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#RequestHead"><span class="hs-identifier hs-type">RequestHead</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-47"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#getRequestSubprotocols"><span class="hs-identifier hs-var">getRequestSubprotocols</span></a><span>
+</span><a name="line-48"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#Response"><span class="hs-identifier hs-type">Response</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-49"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#ResponseHead"><span class="hs-identifier hs-type">ResponseHead</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-50"></a><span>
+</span><a name="line-51"></a><span>      </span><span class="hs-comment">-- * WebSocket message types</span><span>
+</span><a name="line-52"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Types.html#Message"><span class="hs-identifier hs-type">Message</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-53"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Types.html#ControlMessage"><span class="hs-identifier hs-type">ControlMessage</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-54"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Types.html#DataMessage"><span class="hs-identifier hs-type">DataMessage</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-55"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Types.html#WebSocketsData"><span class="hs-identifier hs-type">WebSocketsData</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-56"></a><span>
+</span><a name="line-57"></a><span>      </span><span class="hs-comment">-- * Exceptions</span><span>
+</span><a name="line-58"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Http.html#HandshakeException"><span class="hs-identifier hs-type">HandshakeException</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-59"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Types.html#ConnectionException"><span class="hs-identifier hs-type">ConnectionException</span></a><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><a name="line-60"></a><span>
+</span><a name="line-61"></a><span>      </span><span class="hs-comment">-- * Running a standalone server</span><span>
+</span><a name="line-62"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#ServerApp"><span class="hs-identifier hs-type">ServerApp</span></a><span>
+</span><a name="line-63"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#runServer"><span class="hs-identifier hs-var">runServer</span></a><span>
+</span><a name="line-64"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#runServerWith"><span class="hs-identifier hs-var">runServerWith</span></a><span>
+</span><a name="line-65"></a><span>
+</span><a name="line-66"></a><span>      </span><span class="hs-comment">-- * Utilities for writing your own server</span><span>
+</span><a name="line-67"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#makeListenSocket"><span class="hs-identifier hs-var">makeListenSocket</span></a><span>
+</span><a name="line-68"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#makePendingConnection"><span class="hs-identifier hs-var">makePendingConnection</span></a><span>
+</span><a name="line-69"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Server.html#makePendingConnectionFromStream"><span class="hs-identifier hs-var">makePendingConnectionFromStream</span></a><span>
+</span><a name="line-70"></a><span>
+</span><a name="line-71"></a><span>      </span><span class="hs-comment">-- * Running a client</span><span>
+</span><a name="line-72"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Client.html#ClientApp"><span class="hs-identifier hs-type">ClientApp</span></a><span>
+</span><a name="line-73"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Client.html#runClient"><span class="hs-identifier hs-var">runClient</span></a><span>
+</span><a name="line-74"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Client.html#runClientWith"><span class="hs-identifier hs-var">runClientWith</span></a><span>
+</span><a name="line-75"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Client.html#runClientWithSocket"><span class="hs-identifier hs-var">runClientWithSocket</span></a><span>
+</span><a name="line-76"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Client.html#runClientWithStream"><span class="hs-identifier hs-var">runClientWithStream</span></a><span>
+</span><a name="line-77"></a><span>
+</span><a name="line-78"></a><span>      </span><span class="hs-comment">-- * Utilities</span><span>
+</span><a name="line-79"></a><span>    </span><span class="hs-special">,</span><span> </span><a href="Network.WebSockets.Connection.html#forkPingThread"><span class="hs-identifier hs-var">forkPingThread</span></a><span>
+</span><a name="line-80"></a><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><a name="line-81"></a><span>
+</span><a name="line-82"></a><span>
+</span><a name="line-83"></a><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><a name="line-84"></a><span class="hs-keyword">import</span><span>           </span><a href="Network.WebSockets.Client.html"><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span class="hs-operator">.</span><span class="hs-identifier">Client</span></a><span>
+</span><a name="line-85"></a><span class="hs-keyword">import</span><span>           </span><a href="Network.WebSockets.Connection.html"><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span class="hs-operator">.</span><span class="hs-identifier">Connection</span></a><span>
+</span><a name="line-86"></a><span class="hs-keyword">import</span><span>           </span><a href="Network.WebSockets.Http.html"><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span class="hs-operator">.</span><span class="hs-identifier">Http</span></a><span>
+</span><a name="line-87"></a><span class="hs-keyword">import</span><span>           </span><a href="Network.WebSockets.Server.html"><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span class="hs-operator">.</span><span class="hs-identifier">Server</span></a><span>
+</span><a name="line-88"></a><span class="hs-keyword">import</span><span>           </span><a href="Network.WebSockets.Types.html"><span class="hs-identifier">Network</span><span class="hs-operator">.</span><span class="hs-identifier">WebSockets</span><span class="hs-operator">.</span><span class="hs-identifier">Types</span></a><span>
+</span><a name="line-89"></a></pre></body></html>

@@ -18,29 +18,28 @@ import           Data.List (unfoldr)
 
 import           Data.Time.Clock
 
-
--- | The representation of one message
-data Chat = Chat { origin  :: Origin  -- ^ The origin of message
-                 , time    :: UTCTime   -- ^ The time (Internally in UTC, Externally in JST)
-                 , sender  :: String  -- ^ The display name of sender the message sent by
-                 , message :: String -- ^ The actual message
+-- | The representation of one message.
+data Chat = Chat { origin  :: Origin  -- ^ The origin of message.
+                 , time    :: UTCTime   -- ^ The time (Internally in UTC, Externally in JST).
+                 , sender  :: String  -- ^ The display name of sender the message sent by.
+                 , message :: String -- ^ The actual message.
                  } deriving Show
 
--- | The representation of origin where a message come from
-data Origin = NicoNico -- ^ NicoNico live stream. See <http://com.nicovideo.jp/community/co3265652>
-            | TUGame   -- ^ TUGame original site. See <http://tk2-217-18218.vs.sakura.ne.jp>
-            | YouTube  -- ^ YouTube live stream. See <https://www.youtube.com/channel/UCzXL5v5_-L-s4cDhK3I35Dg>
-            | TwitCasting -- ^ Twitcasting live stream. See <https://twitcasting.tv/c:t_umezawa>
+-- | The representation of origin where a message come from.
+data Origin = NicoNico -- ^ NicoNico live stream. See <http://com.nicovideo.jp/community/co3265652>.
+            | TUGame   -- ^ TUGame original site. See <http://tk2-217-18218.vs.sakura.ne.jp>.
+            | YouTube  -- ^ YouTube live stream. See <https://www.youtube.com/channel/UCzXL5v5_-L-s4cDhK3I35Dg>.
+            | TwitCasting -- ^ Twitcasting live stream. See <https://twitcasting.tv/c:t_umezawa>.
             deriving Show
 
--- | convert origin to chat websocket acceptable string
+-- | Convert origin to chat websocket acceptable string.
 toOriginString :: Origin -> String
 toOriginString NicoNico    = "NN"
 toOriginString TUGame      = "TU"
 toOriginString YouTube     = "YT"
 toOriginString TwitCasting = "TC"
 
--- | convert origin string to its Enum value
+-- | Convert origin string to its Enum value.
 fromOriginString :: String -> Origin
 fromOriginString "NN" = NicoNico
 fromOriginString "TU" = TUGame
@@ -49,6 +48,7 @@ fromOriginString "TC" = TwitCasting
 fromOriginString x    = error $ "Unrecognized string found: " ++ x
 
 -- assume the argument is formatted as hh:mm:ss and in 24h format
+-- | Convert hh:mm:ss in JST to 'UTCTime'.
 fromTimeString :: String -> IO UTCTime
 fromTimeString str = do
   currTime <- getCurrentTime

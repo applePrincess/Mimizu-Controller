@@ -8,10 +8,26 @@ Maintainer  : Apple Princess
 Stability   : experimental
 Portability : portable
 -}
-module Framework where
+module Framework
+  ( hostAddress
+  , gamePort
+  , chatPort
+  , GameReceiveCallback
+  , ErrorHandler
+  , ChatCallback
+  , GameAngle
+  , DashFlag
+  , MutablePlayerList
+  , MutableFoodList
+  , PlayerID
+  , Ranking
+  , convertToSendable
+  , pullIORefs
+  , eliminateIORef
+  , mainLoop ) where
 
 import           Control.Concurrent   (forkIO, threadDelay, MVar, newEmptyMVar, takeMVar, putMVar, forkFinally, killThread)
-import           Control.Monad        (forever, replicateM, unless)
+import           Control.Monad        (forever, replicateM, unless, when)
 import           Data.Bits            (shiftL, (.&.), (.|.))
 import qualified Data.ByteString      as BS
 import           Data.ByteString.Lazy (toStrict, unpack)
@@ -76,6 +92,7 @@ type PlayerID          = IORef Index
 
 -- | High score of the day (when you started to play)
 type Ranking           = [(String, Word32)]
+
 -- | Convert to websocket acceptable form.
 convertToSendable :: (DashFlag, GameAngle) -> BS.ByteString
 convertToSendable (flg, ang) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
@@ -122,13 +139,14 @@ parseNumber :: IORef Index -> Word8 -> IO ()
 parseNumber ref idx = atomicWriteIORef ref (integralToIndex idx)
 
 -- | A tag for parsing data.
-playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag :: Word8
+playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag, teamParserTag :: Word8
 
 playerParseTag = intToWord8 $ fromEnum 'P'
 actionParseTag = intToWord8 $ fromEnum 'A'
 foodParseTag   = intToWord8 $ fromEnum 'F'
 deathParseTag  = intToWord8 $ fromEnum 'D'
 numberParseTag = intToWord8 $ fromEnum 'N'
+teamParserTag  = intToWord8 $ fromEnum 'T' -- for future use.
 
 -- | parse binary data from 'gameSocket'.
 parseGameData :: PlayerID -> MutablePlayerList -> MutableFoodList -> [Word8] -> IO (Either String ())
@@ -159,6 +177,7 @@ parseGameData pid players foods (x:xs) =
            else (do
            parseDeath players idx
            parseGameData pid players foods $ tail xs)
+     | x == teamParserTag -> parseGameData pid players foods xs -- simply ignore.
      | otherwise         -> error $ "Unrecognized tag found: " ++ show x
 parseGameData _ _ _ [] = return $ Right ()
 
@@ -188,9 +207,11 @@ parseChat msg = do
     (T.unpack n) (T.unpack $ T.concat ms)
   where (orig:ts:n:ms)  = T.splitOn (T.pack "\t") msg
 
+-- | Parse Text into Ranking.
 parseRanking :: T.Text -> Ranking
 parseRanking msg = parseRank . tail $ T.words msg
-  where parseRank (name:score:others) = (T.unpack name, read $ T.unpack score) : parseRank others
+  where parseRank (rankedName:score:others) = (T.unpack rankedName, read $ T.unpack score) : parseRank others
+        parseRank [_]                 = error $ "Unrecognized hiscore string found: " ++ show msg
         parseRank []                  = []
 
 -- | The actual websocket handling function for 'gamePort'.
@@ -254,11 +275,21 @@ mainLoop :: String -- ^ The session id you want to play.
   -> IO ()
 mainLoop sid handler cbGame cbChat chatSend isForever = withSocketsDo $ do
   mv <- newEmptyMVar
-  gameThreadID <- forkFinally (startClient gamePort (run sid handler cbGame mv)) (\_ -> return ())
+--  gameThreadID <- forkFinally (startClient gamePort (run sid handler cbGame mv)) (\_ -> return ())
   chatThreadID <- forkFinally (startClient chatPort (runChat sid cbChat chatSend)) (\_ -> return ())
+  _ <- forkFinally (gameLoop sid handler cbGame isForever mv) (\_ -> return ())
   _ <- takeMVar mv
-  killThread gameThreadID
+--  killThread gameThreadID
   killThread chatThreadID
-  if isForever then mainLoop sid handler cbGame cbChat chatSend isForever else return ()
+  when isForever $ mainLoop sid handler cbGame cbChat chatSend isForever
   where hostString = toAddrString hostAddress
-        startClient pt func = runClient hostString (fromEnum pt) "/" func
+        startClient pt = runClient hostString (fromEnum pt) "/"
+
+gameLoop :: String -> ErrorHandler -> GameReceiveCallback -> Bool -> MVar () -> IO ()
+gameLoop sid handler cb isForever mv' = do
+  mv <- newEmptyMVar
+  gameThreadID <- forkFinally (runClient hostString (fromEnum gamePort) "/" (run sid handler cb mv)) (\_ -> return ())
+  takeMVar mv
+  killThread gameThreadID
+  when isForever $ gameLoop sid handler cb isForever mv'
+  where  hostString = toAddrString hostAddress
