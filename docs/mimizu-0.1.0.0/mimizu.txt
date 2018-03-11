@@ -142,13 +142,16 @@ type Index = Word32
 intToWord8 :: Int -> Word8
 
 -- | Convert to Index type
-integralToIndex :: Integral a => a -> Index
+integralToIndex :: (Enum a, Integral a) => a -> Index
 
 -- | Convert Text to list of Triplets
 makeTriplets :: Text -> [(Index, String, [Color])]
 
 -- | Convert framework color enum from string
 makeColors :: String -> [Color]
+
+-- | Caluculate difference between two angles.
+diffAngle :: Double -> Double -> Double
 instance GHC.Show.Show Mimizu.Util.Color
 instance GHC.Classes.Eq Mimizu.Util.Color
 instance GHC.Enum.Enum Mimizu.Util.Color
@@ -211,7 +214,7 @@ btn :: Player -> Bool
 jn :: Player -> Int32
 
 -- | The <tt>gear</tt> the player currently in
-sh :: Player -> Float
+sh :: Player -> Double
 
 -- | Current speed of the player specified
 spd :: Player -> Word16
@@ -220,36 +223,36 @@ spd :: Player -> Word16
 vol :: Player -> Word32
 
 -- | The thickness of the player.
-sr :: Player -> Float
+sr :: Player -> Double
 
 -- | Minimum turn radius
-tr :: Player -> Float
+tr :: Player -> Double
 
 -- | The x location of head of the player specified. if it is too far,
 --   return rough value by Left otherwise, return precise value by Right
-x0 :: Player -> Either Word16 Float
+x0 :: Player -> Either Word16 Double
 
 -- | The y location of head of the player specified. if it is too far,
 --   return rough value by Left otherwise, return precise value by Right
-y0 :: Player -> Either Word16 Float
+y0 :: Player -> Either Word16 Double
 
 -- | Current Actual Head the player specified is going
-angle :: Player -> Float
+angle :: Player -> Double
 
 -- | The x location of idx-th joints of the player specified
-jointX :: Index -> Player -> Float
+jointX :: Index -> Player -> Double
 
 -- | The y location of index-th joints of the player specified
-jointY :: Index -> Player -> Float
+jointY :: Index -> Player -> Double
 
 -- | Size convert function from the length
-sizeR :: Length -> Float
+sizeR :: Length -> Double
 
 -- | Compatibility function for <tt>joinxX</tt> and <a>jointY</a>
-x :: Index -> Player -> Float
+x :: Index -> Player -> Double
 
 -- | Compatibility function for <tt>joinxX</tt> and <a>jointY</a>
-y :: Index -> Player -> Float
+y :: Index -> Player -> Double
 
 -- | The helper function for <a>MutablePlayerList</a>, it will modify the
 --   player info.
@@ -279,27 +282,25 @@ playerWorldY :: Player -> Word16
 
 -- | Returns X location in world coordinate of specified Player. This
 --   function is more precise than <a>worldX</a>, <a>worldY</a>
-playerWorldXf :: Player -> Float
+playerWorldXf :: Player -> Double
 
 -- | Returns X location in world coordinate of specified Player. This
 --   function is more precise than <a>worldX</a>, <a>worldY</a>
-playerWorldYf :: Player -> Float
+playerWorldYf :: Player -> Double
 
--- | Compatibility function for <a>playerWorldX</a> and
---   <tt>plaeyrWorldY</tt>
+-- | Compatibility function for <a>playerWorldX</a> and <a>playerWorldY</a>
 worldX :: Player -> Word16
 
--- | Compatibility function for <a>playerWorldX</a> and
---   <tt>plaeyrWorldY</tt>
+-- | Compatibility function for <a>playerWorldX</a> and <a>playerWorldY</a>
 worldY :: Player -> Word16
 
 -- | Compatibility function for <a>playerWorldXf</a> and
---   <tt>plaeyrWorldYf</tt>
-worldXf :: Player -> Float
+--   <a>playerWorldYf</a>
+worldXf :: Player -> Double
 
 -- | Compatibility function for <a>playerWorldXf</a> and
---   <tt>plaeyrWorldYf</tt>
-worldYf :: Player -> Float
+--   <a>playerWorldYf</a>
+worldYf :: Player -> Double
 
 -- | Returns the distance between players, the distance is measured in
 --   World coordinate.
@@ -308,14 +309,24 @@ headDistance :: Player -> Player -> Word64
 -- | Returns the distance between players, the distance is measured in
 --   World coordinate. This function is more precise than
 --   <a>headDistance</a>
-headDistancef :: Player -> Player -> Float
+headDistancef :: Player -> Player -> Double
 
 -- | Returns LT if first player's volume is less than the others' GT when
 --   greater than, EQ otherwise.
 compareByRanking :: Player -> Player -> Ordering
 
+-- | Comparing relative distance to player specified at the first argument.
+compareByDistanceToPlayer :: Player -> Player -> Player -> Ordering
+
 -- | Sorting playrs given, fits to the ranking.
 sortByRanking :: [Player] -> [Player]
+
+-- | Sorting players given, excluding player itself.
+sortByDistanceToPlayer :: Player -> [Player] -> [Player]
+
+-- | Returns the nearest player to the player specified at the first
+--   argument.
+nearestPlayer :: Player -> [Player] -> Player
 instance GHC.Show.Show Mimizu.Player.Player
 instance GHC.Classes.Eq Mimizu.Player.Player
 
@@ -389,13 +400,13 @@ nearestFood :: Player -> [FoodBlock] -> Food
 nearestWorldFood :: Player -> [FoodBlock] -> WorldFood
 
 -- | Calculate relational distance to the player in world coordinate.
-worldFoodDistance :: Player -> WorldFood -> Float
+worldFoodDistance :: Player -> WorldFood -> Double
 
 -- | Calculate relational distance to the player in mesh coordinate.
 
 -- | <i>Warning: This function does not return the correct value when the
 --   block tha food is contained by is different from the player is in.</i>
-foodDistance :: Player -> Food -> Float
+foodDistance :: Player -> Food -> Double
 
 -- | Compareing the relational distance to the player specified using
 --   <a>worldFoodDistance</a> nearer comes first, further comes second.
@@ -434,9 +445,12 @@ gamePort :: PortNumber
 -- | The port number the socket accepts.
 chatPort :: PortNumber
 
+-- | The type represents an action.
+type Action = (GameAngle, DashFlag)
+
 -- | The callback function, this is called when message received from
 --   <a>gamePort</a>.
-type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> IO (DashFlag, GameAngle)  The action you intend to be taken.
+type GameReceiveCallback = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> Maybe Word8  Your team number. -> IO (Maybe Action)  The action you intend to be taken, if Nothing no actions will be takes.
 
 -- | Handler.
 type ErrorHandler = Index  The index of player you are currently playing. -> [(Index, Maybe Player)]  Current list of players, which may not be updated depending on the distance from you. -> [(Index, FoodBlock)]  Current list of food blocks, which may not be updated for the block where the block you are not in. -> String  The message of error thrown -> IO ()
@@ -465,7 +479,7 @@ type PlayerID = IORef Index
 type Ranking = [(String, Word32)]
 
 -- | Convert to websocket acceptable form.
-convertToSendable :: (DashFlag, GameAngle) -> ByteString
+convertToSendable :: Action -> ByteString
 
 -- | Convert mutable list/map to immutable.
 pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
@@ -473,8 +487,11 @@ pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
 -- | Remove IORef out of the argument.
 eliminateIORef :: (Index, IORef a) -> IO (Index, a)
 
--- | Convert radians (which must be in range (-pi, pi].
+-- | Convert radians (which must be in range (-pi, pi]) to sendable angle.
 fromRadian :: Double -> GameAngle
+
+-- | Convert a vector x y to sendable angle.
+fromPosition :: Int -> Int -> GameAngle
 
 -- | Entry point.
 mainLoop :: String -> ErrorHandler -> GameReceiveCallback -> ChatCallback -> ChatCallback -> Bool -> IO ()

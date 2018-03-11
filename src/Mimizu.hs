@@ -44,7 +44,7 @@ nearestFood pl food = head $ sortByFoodDistance pl f
         f = meshPositions $ food !! (by `shiftL` 8 + bx)
 
 -- | Calculate relational distance to the player in world coordinate.
-worldFoodDistance :: Player -> WorldFood -> Float
+worldFoodDistance :: Player -> WorldFood -> Double
 worldFoodDistance pl (fwx, fwy) = sqrt . fromIntegral $ dx ^ 2 + dy ^ 2
   where px = playerWorldX pl
         py = playerWorldY pl
@@ -52,7 +52,7 @@ worldFoodDistance pl (fwx, fwy) = sqrt . fromIntegral $ dx ^ 2 + dy ^ 2
         dy = max py fwy - min py fwy
 
 -- | Calculate relational distance to the player in mesh coordinate.
-foodDistance :: Player -> Food -> Float
+foodDistance :: Player -> Food -> Double
 foodDistance pl f = sqrt . fromIntegral $ dx ^ 2 + dy ^ 2
   where fx = fst f
         fy = snd f

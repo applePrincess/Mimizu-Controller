@@ -35,7 +35,7 @@ createPlayer arr = if length arr >= 6
 
 -- | The length and an air value of the player specified
 va :: Player -> Word32
-va = conv8To32 . take 4 . playerInfo
+va pl = conv8To32 . take 4 $ playerInfo pl
 
 -- | The current speed and `maximum speed` for the player specified
 sbm :: Player -> Word16
@@ -66,11 +66,11 @@ btn = (/= 0) . (.&. 0x800) . act
 
 -- | Number of joints of the player specified
 jn :: Player -> Int32
-jn = (\x -> (toEnum x::Int32) - 14 `div` 8) . length . playerInfo
+jn = (\len -> ((toEnum len::Int32) - 14) `div` 8) . length . playerInfo
 
 -- | The `gear` the player currently in
-sh :: Player -> Float
-sh = max 1 . (fromIntegral :: Int -> Float) . (\x -> floor ((fromIntegral x::Float) / 500.0 - 2)) . spd
+sh :: Player -> Double
+sh = max 1 . (fromIntegral :: Int -> Double) . (\s -> floor ((fromIntegral s::Double) / 500.0 - 2)) . spd
 
 -- | Current speed of the player specified
 spd :: Player -> Word16
@@ -82,44 +82,44 @@ vol = (.&. 0xfffffff) . va
 --     = `shiftR` 8 . va
 
 -- | The thickness of the player.
-sr :: Player -> Float
+sr :: Player -> Double
 sr = sizeR . vol
 
 -- | Minimum turn radius
-tr :: Player -> Float
+tr :: Player -> Double
 tr pl = 350 / spd' / max 1 (sh pl - 1)
-  where spd' = fromIntegral $ spd pl :: Float
+  where spd' = fromIntegral $ spd pl :: Double
 
 -- | The x location of head of the player specified.
 --   if it is too far, return rough value by Left
 --   otherwise, return precise value by Right
-x0 :: Player -> Either Word16 Float
+x0 :: Player -> Either Word16 Double
 x0 pl = if jn pl < 0 then Left (usx pl) else Right (x 0 pl)
 
 -- | The y location of head of the player specified.
 --   if it is too far, return rough value by Left
 --   otherwise, return precise value by Right
-y0 :: Player -> Either Word16 Float
+y0 :: Player -> Either Word16 Double
 y0 pl = if jn pl < 0 then Left (usy pl) else Right (y 0 pl)
 
 -- | Current Actual Head the player specified is going
-angle :: Player -> Float
+angle :: Player -> Double
 angle pl = atan2 (y 0 pl - y 1 pl) (x 0 pl - y 1 pl)
 
 -- | The x location of idx-th joints of the player specified
-jointX :: Index -> Player -> Float
-jointX idx = conv8To32f . take 4 . drop (fromEnum idx*8+8) . playerInfo
+jointX :: Index -> Player -> Double
+jointX idx = realToFrac . conv8To32f . take 4 . drop (fromEnum idx * 8 + 8) . playerInfo
 
 -- | The y location of index-th joints of the player specified
-jointY :: Index -> Player -> Float
-jointY idx = conv8To32f . take 4 . drop (fromEnum idx*8+8+4) . playerInfo
+jointY :: Index -> Player -> Double
+jointY idx = realToFrac .conv8To32f . take 4 . drop (fromEnum idx*8+6+4) . playerInfo
 
 -- | Size convert function from the length
-sizeR :: Length -> Float
+sizeR :: Length -> Double
 sizeR v = fromIntegral v ** 0.21875 * 7
 
 -- | Compatibility function for 'joinxX' and 'jointY'
-x, y :: Index -> Player -> Float
+x, y :: Index -> Player -> Double
 x = jointX
 y = jointY
 
@@ -146,14 +146,15 @@ modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)
 -- | Returns X location in world coordinate of specified Player
 playerWorldX, playerWorldY :: Player -> Word16
 playerWorldX pl = case x0 pl of
-              Left v  -> v
-              Right v -> floor $ v * angle pl
+                    Left v  -> v
+                    Right v -> floor $ v * angle pl
+
 playerWorldY pl = case y0 pl of
               Left v  -> v
               Right v -> floor $ v * angle pl
 
 -- | Returns X location in world coordinate of specified Player. This function is more precise than 'worldX', 'worldY'
-playerWorldXf, playerWorldYf :: Player -> Float
+playerWorldXf, playerWorldYf :: Player -> Double
 playerWorldXf pl = case x0 pl of
               Left v  -> fromIntegral v
               Right v -> v * angle pl
@@ -161,13 +162,13 @@ playerWorldYf pl = case y0 pl of
               Left v  -> fromIntegral v
               Right v -> v * angle pl
 
--- | Compatibility function for 'playerWorldX' and 'plaeyrWorldY'
+-- | Compatibility function for 'playerWorldX' and 'playerWorldY'
 worldX, worldY :: Player -> Word16
 worldX = playerWorldX
 worldY = playerWorldY
 
--- | Compatibility function for 'playerWorldXf' and 'plaeyrWorldYf'
-worldXf, worldYf :: Player -> Float
+-- | Compatibility function for 'playerWorldXf' and 'playerWorldYf'
+worldXf, worldYf :: Player -> Double
 worldXf = playerWorldXf
 worldYf = playerWorldYf
 
@@ -180,7 +181,7 @@ headDistance p1 p2 = floor .  sqrt . fromIntegral $ (p1x - p2x) ^ 2 + (p1y - p2y
         p2y = worldY p2
 
 -- | Returns the distance between players, the distance is measured in World coordinate. This function is more precise than 'headDistance'
-headDistancef :: Player -> Player -> Float
+headDistancef :: Player -> Player -> Double
 headDistancef p1 p2 = sqrt $ (p1x - p2x) ^^ 2 + (p1y - p2y) ^^ 2
   where p1x = worldXf p1
         p1y = worldYf p1
@@ -193,6 +194,21 @@ compareByRanking p1 p2 = compare vx vy
   where vx = vol p1
         vy = vol p2
 
+-- | Comparing relative distance to player specified at the first argument.
+compareByDistanceToPlayer :: Player -> Player -> Player -> Ordering
+compareByDistanceToPlayer pl p1 p2 = compare dx dy
+  where dx = headDistance pl p1
+        dy = headDistance pl p2
+
 -- | Sorting playrs given, fits to the ranking.
 sortByRanking  :: [Player] -> [Player]
 sortByRanking = sortBy (flip compareByRanking)
+
+-- | Sorting players given, excluding player itself.
+sortByDistanceToPlayer :: Player -> [Player] -> [Player]
+sortByDistanceToPlayer pl players = sortBy (compareByDistanceToPlayer pl) players'
+  where players' = filter (/= pl) players
+
+-- | Returns the nearest player to the player specified at the first argument.
+nearestPlayer :: Player -> [Player] -> Player
+nearestPlayer pl = head . sortByDistanceToPlayer pl
