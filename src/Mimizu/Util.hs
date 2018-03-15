@@ -171,7 +171,9 @@ makeColors = map (\c ->  toEnum $ head (readHex [c]) & fst)
 
 -- | Caluculate difference between two angles.
 diffAngle :: Double -> Double -> Double
-diffAngle x y = if v > pi then v - 2*pi else v
+diffAngle x y = if abs d1 > abs d2 then d2 else d1 -- if v > pi then v - 2*pi else v
   where x' = mod' x (2*pi) -- [0, 2*pi)
         y' = mod' y (2*pi) -- [0, 2*pi)
-        v = if x' > y' then x' - y' else y' - x'
+--        v = if x' > y' then x' - y' else y' - x'
+        d1 = x' - y'
+        d2 = y' - x'

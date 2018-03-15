@@ -147,20 +147,20 @@ modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)
 playerWorldX, playerWorldY :: Player -> Word16
 playerWorldX pl = case x0 pl of
                     Left v  -> v
-                    Right v -> floor $ v * angle pl
+                    Right v -> floor $ v + sr pl * cos (angle pl)
 
 playerWorldY pl = case y0 pl of
               Left v  -> v
-              Right v -> floor $ v * angle pl
+              Right v -> floor $ v + sr pl * sin (angle pl)
 
 -- | Returns X location in world coordinate of specified Player. This function is more precise than 'worldX', 'worldY'
 playerWorldXf, playerWorldYf :: Player -> Double
 playerWorldXf pl = case x0 pl of
               Left v  -> fromIntegral v
-              Right v -> v * angle pl
+              Right v -> v + sr pl * cos (angle pl)
 playerWorldYf pl = case y0 pl of
               Left v  -> fromIntegral v
-              Right v -> v * angle pl
+              Right v -> v + sr pl * sin (angle pl)
 
 -- | Compatibility function for 'playerWorldX' and 'playerWorldY'
 worldX, worldY :: Player -> Word16
@@ -200,6 +200,12 @@ compareByDistanceToPlayer pl p1 p2 = compare dx dy
   where dx = headDistance pl p1
         dy = headDistance pl p2
 
+-- | Same as 'compareByDistanceToPlayer', but uses 'headDistancef' instead.
+compareByDistanceToPlayerf :: Player -> Player -> Player -> Ordering
+compareByDistanceToPlayerf pl p1 p2 = compare dx dy
+  where dx = headDistancef pl p1
+        dy = headDistancef pl p2
+
 -- | Sorting playrs given, fits to the ranking.
 sortByRanking  :: [Player] -> [Player]
 sortByRanking = sortBy (flip compareByRanking)
@@ -209,6 +215,16 @@ sortByDistanceToPlayer :: Player -> [Player] -> [Player]
 sortByDistanceToPlayer pl players = sortBy (compareByDistanceToPlayer pl) players'
   where players' = filter (/= pl) players
 
+-- | Same as 'sortByDistanceToPlayer', but uses 'compareByDistanceToPlayerf' instead.
+sortByDistanceToPlayerf :: Player -> [Player] -> [Player]
+sortByDistanceToPlayerf pl players = sortBy (compareByDistanceToPlayerf pl) players'
+  where players' = filter (/= pl) players
+
+
 -- | Returns the nearest player to the player specified at the first argument.
 nearestPlayer :: Player -> [Player] -> Player
 nearestPlayer pl = head . sortByDistanceToPlayer pl
+
+-- | Same as 'nearestPlayer' but uses 'sortByDistanceToPlayer' instead.
+nearestPlayerf :: Player -> [Player] -> Player
+nearestPlayerf pl = head . sortByDistanceToPlayerf pl
