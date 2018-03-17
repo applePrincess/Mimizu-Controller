@@ -39,7 +39,7 @@ module Framework
   , mainLoop ) where
 
 import           Control.Concurrent   ( forkIO, threadDelay, MVar, newEmptyMVar
-                                      , takeMVar, putMVar, forkFinally, killThread)
+                                      , takeMVar, putMVar, forkFinally, killThread )
 import           Control.Monad        (forever, replicateM, unless, when)
 import           Data.Bits            (shiftL, (.&.), (.|.))
 import qualified Data.ByteString      as BS
@@ -93,10 +93,10 @@ type DashFlag  = Bool
 
 -- consider to use StorableArray Index a
 -- | A list\/map of players, Nothing if the player for that Index is not being played\/dead.
-type MutablePlayerList = [(Index, IORef (Maybe Player))]
+type MutablePlayerList = [IORef (Maybe Player)]
 
 -- | A list\/map of food blocks.
-type MutableFoodList   = [(Index, IORef FoodBlock)]
+type MutableFoodList   = [IORef FoodBlock]
 
 -- | Your ID for playing, the index is the key of MutablePlayerList.
 type PlayerID          = IORef Index
@@ -110,41 +110,50 @@ convertToSendable (ang, flg) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|.
 
 -- | Convert to websocket acceptable form, if we send by arrow keys.
 convertToSendableWithKey :: Action -> Arrow -> BS.ByteString
-convertToSendableWithKey (ang, flg) LeftArrow  = convertToSendable (ang, flg)
-convertToSendableWithKey (ang, flg) RightArrow = convertToSendable (ang, flg)
-convertToSendableWithKey (ang, flg) None       = convertToSendable (ang, flg)
+convertToSendableWithKey (ang, flg) arr  = BS.pack $ case arr of
+                                                       LeftArrow  -> [0x2 .|. hBit, lBit]
+                                                       RightArrow -> [0x4 .|. hBit, lBit]
+                                                       None       -> [hBit, lBit]
+  where [hBit, lBit] = BS.unpack $ convertToSendable (ang, flg)
 
 -- * The section of internal data.
 
+{-# NOINLINE playersInternal #-}
 playersInternal :: MutablePlayerList
-playersInternal = unsafePerformIO $ zip [0::Index ..] <$> replicateM 0x100 (newIORef Nothing)
+playersInternal = unsafePerformIO $ replicateM 0x100 (newIORef Nothing)
 
+{-# NOINLINE  foodsInternal #-}
 foodsInternal :: MutableFoodList
-foodsInternal = unsafePerformIO $ zip [0::Index ..] <$> replicateM 0x10000 (newIORef (FoodBlock []))
+foodsInternal = unsafePerformIO $ replicateM 0x10000 (newIORef (FoodBlock []))
 
+{-# NOINLINE chatsInternal #-}
 chatsInternal :: IORef [Chat]
 chatsInternal = unsafePerformIO $ newIORef []
 
+{-# NOINLINE rankingInternal #-}
 rankingInternal :: IORef Ranking
 rankingInternal = unsafePerformIO $ newIORef []
 
+{-# NOINLINE teamIDInternal #-}
 teamIDInternal :: IORef (Maybe Word8)
 teamIDInternal = unsafePerformIO $ newIORef Nothing
 
+{-# NOINLINE  playerIDInternal #-}
 playerIDInternal :: IORef Index
 playerIDInternal = unsafePerformIO $ newIORef 0
 
+{-# NOINLINE  frameCountInternal #-}
 frameCountInternal :: IORef Word16
 frameCountInternal = unsafePerformIO $ newIORef 0
 
 -- * External Info
 
 -- | Current list of players, which may not be updated depending on the distance from you.
-players :: IO [(Index, Maybe Player)]
+players :: IO [Maybe Player]
 players = pullIORefs playersInternal
 
 -- | Current list of food blocks, which may not be updated for the block where the block you are not in.
-foods :: IO [(Index, FoodBlock)]
+foods :: IO [FoodBlock]
 foods = pullIORefs foodsInternal
 
 -- |  Chats recieved since connected, including the latest.
@@ -168,12 +177,13 @@ frameCount :: IO Word16
 frameCount = readIORef frameCountInternal
 
 -- | Convert mutable list\/map to immutable.
-pullIORefs :: [(Index, IORef a)] -> IO [(Index, a)]
-pullIORefs = mapM eliminateIORef
+pullIORefs :: [IORef a] -> IO [a]
+pullIORefs = mapM readIORef
 
 -- | Remove IORef out of the argument.
-eliminateIORef :: (Index, IORef a) -> IO (Index, a)
-eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
+
+-- eliminateIORef :: (Index, IORef a) -> IO (Index, a)
+-- eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
 
 -- | Convert radians (which must be in range (-pi, pi]) to sendable angle.
 fromRadian :: Double -> GameAngle
@@ -195,20 +205,21 @@ fromPositionf x y = floor ((ang / pi) * 0x800) .&. 0xfff
 playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag :: Word8
 frameCountParseTag :: Word8
 
-playerParseTag = intToWord8 $ fromEnum 'P'
-actionParseTag = intToWord8 $ fromEnum 'A'
-foodParseTag   = intToWord8 $ fromEnum 'F'
-deathParseTag  = intToWord8 $ fromEnum 'D'
-numberParseTag = intToWord8 $ fromEnum 'N'
-frameCountParsetag = intToWord8 $ fromEnum 'Z'
+playerParseTag     = intToWord8 $ fromEnum 'P'
+actionParseTag     = intToWord8 $ fromEnum 'A'
+foodParseTag       = intToWord8 $ fromEnum 'F'
+deathParseTag      = intToWord8 $ fromEnum 'D'
+numberParseTag     = intToWord8 $ fromEnum 'N'
+frameCountParseTag = intToWord8 $ fromEnum 'Z'
 --teamParserTag  = intToWord8 $ fromEnum 'T' -- for future use.
 
-parsePlayer, parseFood, parseAction, parseFrameCount :: Index -> [Word8] -> IO ()
+parsePlayer, parseFood, parseAction :: Index -> [Word8] -> IO ()
 parseNumber, parseDeath :: Index -> IO ()
+parseFrameCount :: [Word8] -> IO ()
 
 -- | Modify player list using parsed player other info for the specific plaeyr.
 parsePlayer idx d = do
-  let pRef = fromJust $ lookup idx playersInternal
+  let pRef = playersInternal !! fromEnum idx
   pl <- readIORef pRef
   case pl of
     Nothing -> atomicWriteIORef pRef . Just $ createPlayer d
@@ -216,11 +227,11 @@ parsePlayer idx d = do
 
 -- | Modify food list using parsed food info.
 parseFood idx d = atomicWriteIORef ref $ FoodBlock d
-  where ref = fromJust $ lookup idx foodsInternal
+  where ref = foodsInternal !! fromEnum idx
 
 -- | Modify player list using pased action binary data for the specific player.
 parseAction idx d = do
-  let pRef = fromJust $ lookup idx playersInternal
+  let pRef = playersInternal !! fromEnum idx
       val  = conv8To16 d
   pl <- readIORef pRef
   case pl of
@@ -232,7 +243,7 @@ parseNumber idx = atomicWriteIORef playerIDInternal (integralToIndex idx)
 
 -- | Modify player list using parsed death info
 parseDeath idx = atomicWriteIORef ref Nothing
-  where ref = fromJust $ lookup idx playersInternal
+  where ref = playersInternal !! fromEnum idx
 
 parseFrameCount = writeIORef frameCountInternal . conv8To16
 
@@ -279,7 +290,7 @@ parseSkinData txt = do
 -- | Modify player specified by index in player list using specified tuple.
 parseNameSkin :: (Index, String, [Color]) -> IO ()
 parseNameSkin (idx, n, s) = do
-  let ref = fromJust $ lookup idx playersInternal
+  let ref =  playersInternal !! fromEnum idx
   v <- readIORef ref
   case v of
     Nothing -> atomicWriteIORef ref . Just $ Player s n 0 0 []
