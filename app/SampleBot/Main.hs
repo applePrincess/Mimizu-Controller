@@ -41,9 +41,9 @@ actionDecision index playerList foodList| isBlueZone wx wy    = let [vx, vy] = [
                                                                    else aimFood pl foodList
                                         | isJust ep              = Just (fromPositionf dy dx, False)
                                         | otherwise              = aimFood pl foodList
-  where pl = playerList !! fromEnum index
+  where pl = fromJust $ playerList !! fromEnum index
         [wx, wy] = [playerWorldXf pl, playerWorldYf pl]
-        ep = searchEnemy pl . catMaybes $ filter (/= pl) playerList
+        ep = searchEnemy pl . catMaybes $ filter (/= (Just pl)) playerList
         [ex, ey] = [playerWorldXf $ fromJust ep, playerWorldYf $ fromJust ep]
         [dx, dy] = [max ex wx - min ex wx, max ey wy - min ey wy]
         nn = (dx *dx + dy * dy) / (sr pl * sr pl)

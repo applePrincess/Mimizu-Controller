@@ -19,18 +19,35 @@ import           Mimizu.Util
 -- | The type of the length
 type Length = Word32
 
+-- | Represnts an arrow key which being pressed, or not if it is None.
+data ArrowKey = LeftArrow | RightArrow | None
+
+-- | Must be in range 0 ~ 4095.
+type GameAngle = Word16
+-- | True if dash is on, False otherwise.
+type DashFlag  = Bool
+
+-- | The type represents an action.
+type Action = (GameAngle, DashFlag)
+
+-- | The type represents an action, including key state.
+type ActionWithKey = (GameAngle, DashFlag, ArrowKey)
+
 -- | The representation of player
 data Player = Player { skin       :: [Color] -- ^ Skin information, a sequence of color
                      , name       :: String  -- ^ Name to be displayed
                      , excreta    :: Word32  -- ^ Counter to be shorten
                      , act        :: Word16  -- ^ Recent action
                      , playerInfo :: [Word8] -- ^ Joints and other info
+                     , win        :: Word16  -- ^ Number of winings during A `Battle Royal`. 0 by default
+                     , lose       :: Word16  -- ^ Number of losts during A `Battle Royal`. 0 by default
+                     , highScore :: Word32   -- ^ The highest score recorded in a day (0:00:00-23:59:59 in JST)
                      } deriving (Eq, Show)
 
 -- | A constructor-like function, compatibility for JS original source
 createPlayer :: [Word8] -> Player
 createPlayer arr = if length arr >= 6
-                   then Player [toEnum 15] "" 0 0 arr
+                   then Player [toEnum 15] "" 0 0 arr 0 0 0
                    else error $ "Invalid length of array given: " ++ show arr
 
 -- | The length and an air value of the player specified
@@ -63,6 +80,13 @@ an = (.&. 0xfff) . act
 -- | The flag whether dash button is been pressed by the player specified, true if pressed
 btn :: Player -> Bool
 btn = (/= 0) . (.&. 0x800) . act
+
+-- | The flag whether dash button is been pressed by the player specified, true if pressed
+key :: Player -> ArrowKey
+key pl | act pl .&. 0x2000 /= 0 = LeftArrow
+       | act pl .&. 0x4000 /= 0 = RightArrow
+       | otherwise              = None
+
 
 -- | Number of joints of the player specified
 jn :: Player -> Int32
@@ -125,23 +149,35 @@ y = jointY
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the player info.
 modifyPlayerInfo :: [Word8] -> Maybe Player -> Maybe Player
-modifyPlayerInfo d = maybe Nothing (\(Player s n e a _) ->  Just $ Player s n e a d)
+modifyPlayerInfo d = maybe Nothing (\pl ->  Just $ pl { playerInfo = d })
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the action.
 modifyAction :: Word16 -> Maybe Player -> Maybe Player
-modifyAction d = maybe Nothing (\(Player s n e _ p) ->  Just $ Player s n e d p)
+modifyAction d = maybe Nothing (\pl ->  Just $ pl { act = d })
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the excreta
 modifyExcreta :: Word32 -> Maybe Player -> Maybe Player
-modifyExcreta d = maybe Nothing (\(Player s n _ a p) ->  Just $ Player s n d a p)
+modifyExcreta d = maybe Nothing (\pl->  Just $ pl { excreta = d })
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the name
 modifyName :: String -> Maybe Player -> Maybe Player
-modifyName d = maybe Nothing (\(Player s _ e a p) ->  Just $ Player s d e a p)
+modifyName d = maybe Nothing (\pl ->  Just $ pl { name = d })
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
 modifySkin :: [Color] -> Maybe Player -> Maybe Player
-modifySkin d = maybe Nothing (\(Player _ n e a p) ->  Just $ Player d n e a p)
+modifySkin d = maybe Nothing (\pl ->  Just $ pl { skin = d })
+
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
+modifyWin :: Word16 -> Maybe Player -> Maybe Player
+modifyWin d = maybe Nothing (\pl ->  Just $ pl { win = d })
+
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
+modifyLose :: Word16 -> Maybe Player -> Maybe Player
+modifyLose d = maybe Nothing (\pl ->  Just $ pl { lose = d })
+
+-- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
+modifyHighScore :: Word64 -> Maybe Player -> Maybe Player
+modifyHighScore d = maybe Nothing (\pl ->  Just $ pl { highScore = d })
 
 -- | Returns X location in world coordinate of specified Player
 playerWorldX, playerWorldY :: Player -> Word16
@@ -228,3 +264,12 @@ nearestPlayer pl = head . sortByDistanceToPlayer pl
 -- | Same as 'nearestPlayer' but uses 'sortByDistanceToPlayer' instead.
 nearestPlayerf :: Player -> [Player] -> Player
 nearestPlayerf pl = head . sortByDistanceToPlayerf pl
+
+
+-- | Returns the action taken by player specified, ignoring key pressed.
+action :: Player -> Action
+action pl = (an pl, btn pl)
+
+-- | Returns the action taken by player specified, acknowledging key pressed.
+actionWithKey :: Player -> ActionWithKey
+actionWithKey pl = (an pl, btn pl, key pl)

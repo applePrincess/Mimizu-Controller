@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiWayIf    #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 {-|
 Module      : Framework
 Copyright   : (c) Apple Princess 2018
@@ -12,20 +12,15 @@ module Framework
   ( hostAddress
   , gamePort
   , chatPort
-  , Action
   , GameReceiveCallback
   , ErrorHandler
   , ChatCallback
-  , GameAngle
-  , DashFlag
   , MutablePlayerList
   , MutableFoodList
   , PlayerID
   , Ranking
   , convertToSendable
   , convertToSendableWithKey
---  , pullIORefs
---  , eliminateIORef
   , fromRadian
   , fromPosition
   , fromPositionf
@@ -36,6 +31,8 @@ module Framework
   , teamID
   , playerID
   , frameCount
+  , battleRoyalFlag
+  , endFlag
   , mainLoop ) where
 
 import           Control.Concurrent   ( forkIO, threadDelay, MVar, newEmptyMVar
@@ -70,10 +67,6 @@ gamePort, chatPort :: PortNumber
 gamePort = 8888
 chatPort = 8891
 
-data Arrow = LeftArrow | RightArrow | None
--- | The type represents an action.
-type Action = (GameAngle, DashFlag)
-
 -- | The callback function, this is called when message received from 'gamePort'.
 type GameReceiveCallback =
   IO (Maybe Action) -- ^ The action you intend to be taken, if Nothing no actions will be takes.
@@ -85,11 +78,6 @@ type ErrorHandler =
 
 -- | The callback function, this is called when message received from 'chatPort'
 type ChatCallback = IO T.Text -- ^ The message you want to send, if it is empty sending will not be fired.
-
--- | Must be in range 0 ~ 4095.
-type GameAngle = Word16
--- | True if dash is on, False otherwise.
-type DashFlag  = Bool
 
 -- consider to use StorableArray Index a
 -- | A list\/map of players, Nothing if the player for that Index is not being played\/dead.
@@ -104,20 +92,26 @@ type PlayerID          = IORef Index
 -- | High score of the day (when you started to play).
 type Ranking           = [(String, Word32)]
 
--- | Convert to websocket acceptable form.
+-- | Special case of 'convertToSendableWithKeyAndRotation'
 convertToSendable :: Action -> BS.ByteString
-convertToSendable (ang, flg) = BS.pack $ conv16To8 $ (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
+convertToSendable action = convertToSendableWithKeyAndRotation action None False
 
--- | Convert to websocket acceptable form, if we send by arrow keys.
-convertToSendableWithKey :: Action -> Arrow -> BS.ByteString
-convertToSendableWithKey (ang, flg) arr  = BS.pack $ case arr of
-                                                       LeftArrow  -> [0x2 .|. hBit, lBit]
-                                                       RightArrow -> [0x4 .|. hBit, lBit]
-                                                       None       -> [hBit, lBit]
-  where [hBit, lBit] = BS.unpack $ convertToSendable (ang, flg)
+-- | Special case of 'convertToSendableWithKeyAndRotation'
+convertToSendableWithKey :: Action -> ArrowKey -> BS.ByteString
+convertToSendableWithKey action arr  = convertToSendableWithKeyAndRotation action arr False
+
+
+-- | Convert to websocket acceptable form, if we send by arrow keys and/or rotation
+convertToSendableWithKeyAndRotation :: Action -> ArrowKey -> Bool -> BS.ByteString
+convertToSendableWithKeyAndRotation (ang, flg) arr rotView = BS.pack . conv16To8 $ d .|. dir .|. rot
+  where d   = (ang::Word16) .&. 0xfff .|. ((if flg then 1 else 0) `shiftL` 15)
+        dir = case arr of
+                LeftArrow  -> 0x20
+                RightArrow -> 0x40
+                None       -> 0x00
+        rot = if rotView then 0x80 else 0x00
 
 -- * The section of internal data.
-
 {-# NOINLINE playersInternal #-}
 playersInternal :: MutablePlayerList
 playersInternal = unsafePerformIO $ replicateM 0x100 (newIORef Nothing)
@@ -145,6 +139,18 @@ playerIDInternal = unsafePerformIO $ newIORef 0
 {-# NOINLINE  frameCountInternal #-}
 frameCountInternal :: IORef Word16
 frameCountInternal = unsafePerformIO $ newIORef 0
+
+{-# NOINLINE mapSizeInternal #-}
+mapSizeInternal :: IORef Word8
+mapSizeInternal = unsafePerformIO $ newIORef 0x7f
+
+{-# NOINLINE battleRoyalFlagInternal #-}
+battleRoyalFlagInternal :: IORef Bool
+battleRoyalFlagInternal = unsafePerformIO $ newIORef False
+
+{-# NOINLINE endFlagInternal #-}
+endFlagInternal :: IORef Bool
+endFlagInternal = unsafePerformIO $ newIORef False
 
 -- * External Info
 
@@ -176,14 +182,22 @@ playerID = readIORef playerIDInternal
 frameCount :: IO Word16
 frameCount = readIORef frameCountInternal
 
+-- | A number of blocks, the total blocks playable is mapSize * mapSize.
+mapSize :: IO Word8
+mapSize = readIORef mapSizeInternal
+
+-- | A flag, whether a `Battle Royal` mode is enabled, or not.
+battleRoyalFlag :: IO Bool
+battleRoyalFlag = readIORef battleRoyalFlagInternal
+
+-- | A flag, whether a `Battle Royal` mode is ended, or not.
+--  NOTE: This is 'False' for all the time when `Battle Royal` is not held.
+endFlag :: IO Bool
+endFlag = readIORef endFlagInternal
+
 -- | Convert mutable list\/map to immutable.
 pullIORefs :: [IORef a] -> IO [a]
 pullIORefs = mapM readIORef
-
--- | Remove IORef out of the argument.
-
--- eliminateIORef :: (Index, IORef a) -> IO (Index, a)
--- eliminateIORef (idx, ref) = (idx,) <$> readIORef ref
 
 -- | Convert radians (which must be in range (-pi, pi]) to sendable angle.
 fromRadian :: Double -> GameAngle
@@ -203,19 +217,23 @@ fromPositionf x y = floor ((ang / pi) * 0x800) .&. 0xfff
 
 -- | A tag for parsing data.
 playerParseTag, actionParseTag, foodParseTag, deathParseTag, numberParseTag :: Word8
-frameCountParseTag :: Word8
+frameCountParseTag, mapSizeParseTag :: Word8
+-- teamParserTag, battleRoyalParseTag :: Word8 -- reserved for feature use.
 
-playerParseTag     = intToWord8 $ fromEnum 'P'
-actionParseTag     = intToWord8 $ fromEnum 'A'
-foodParseTag       = intToWord8 $ fromEnum 'F'
-deathParseTag      = intToWord8 $ fromEnum 'D'
-numberParseTag     = intToWord8 $ fromEnum 'N'
-frameCountParseTag = intToWord8 $ fromEnum 'Z'
+playerParseTag      = intToWord8 $ fromEnum 'P'
+actionParseTag      = intToWord8 $ fromEnum 'A'
+foodParseTag        = intToWord8 $ fromEnum 'F'
+deathParseTag       = intToWord8 $ fromEnum 'D'
+numberParseTag      = intToWord8 $ fromEnum 'N'
+frameCountParseTag  = intToWord8 $ fromEnum 'Z'
+mapSizeParseTag     = intToWord8 $ fromEnum 'M'
 --teamParserTag  = intToWord8 $ fromEnum 'T' -- for future use.
+-- battleRoyalParseTag = intToWord8 $ fromEnum 'B'
 
 parsePlayer, parseFood, parseAction :: Index -> [Word8] -> IO ()
 parseNumber, parseDeath :: Index -> IO ()
 parseFrameCount :: [Word8] -> IO ()
+parseMapSize :: Word8 -> IO ()
 
 -- | Modify player list using parsed player other info for the specific plaeyr.
 parsePlayer idx d = do
@@ -245,7 +263,11 @@ parseNumber idx = atomicWriteIORef playerIDInternal (integralToIndex idx)
 parseDeath idx = atomicWriteIORef ref Nothing
   where ref = playersInternal !! fromEnum idx
 
-parseFrameCount = writeIORef frameCountInternal . conv8To16
+-- | Modify frames passed.
+parseFrameCount = atomicWriteIORef frameCountInternal . conv8To16
+
+-- | Modify map size playable
+parseMapSize = atomicWriteIORef mapSizeInternal
 
 parseGameData :: [Word8] -> IO (Either String ())
 parseGameData (x:xs) =
@@ -259,7 +281,7 @@ parseGameData (x:xs) =
          let idx = integralToIndex . conv8To16 $ take 2 xs
              len = fromEnum $ xs !! 2
          parseFood idx . take (len * 2) $ drop (2+1) xs
-         parseGameData $ drop (fromEnum len * 2) xs
+         parseGameData $ drop (fromEnum len * 2 + 3) xs
      | x == actionParseTag -> do
          let idx = integralToIndex $ head xs
          parseAction idx (take 2 (tail xs))
@@ -275,28 +297,36 @@ parseGameData (x:xs) =
            else do parseDeath idx
                    parseGameData $ tail xs
      | x == frameCountParseTag -> do
+         print $ show (x:take 2 xs)
          parseFrameCount $ take 2 xs
          parseGameData $ drop 2 xs
+     | x == mapSizeParseTag -> do
+         parseMapSize $ head xs
+         parseGameData $ tail xs
+     | otherwise            -> error $ "Unrecognized Tag found" ++ show x
 --     | x == teamParseTag -> do parseGameData xs
 parseGameData [] = return $ Right ()
 
 -- | Modify player list using parsed text data from 'gameSocket'.
 parseSkinData :: T.Text -> IO (Either String ())
 parseSkinData txt = do
-  let triplets = makeTriplets txt
-  mapM_ parseNameSkin triplets
+  let sextuplets = makeSextuplets txt
+  unless (T.null txt) $ mapM_ parseNameSkin sextuplets
   return $ Right ()
 
 -- | Modify player specified by index in player list using specified tuple.
-parseNameSkin :: (Index, String, [Color]) -> IO ()
-parseNameSkin (idx, n, s) = do
+parseNameSkin :: PlayerExternalInfo -> IO ()
+parseNameSkin (idx, n, s, w, l, h) = do
   let ref =  playersInternal !! fromEnum idx
   v <- readIORef ref
   case v of
-    Nothing -> atomicWriteIORef ref . Just $ Player s n 0 0 []
+    Nothing -> atomicWriteIORef ref . Just $ Player s n 0 0 [] 0 0 0
     Just _  -> do
       atomicModifyIORef' ref (\r -> (modifyName n r,()))
       atomicModifyIORef' ref (\r -> (modifySkin s r, ()))
+      atomicModifyIORef' ref (\r -> (modifyWin w r, ()))
+      atomicModifyIORef' ref (\r -> (modifyLose l r, ()))
+      atomicModifyIORef' ref (\r -> (modifyHighScore h r, ()))
 
 -- | Parse Text into Chat so that you can manimupate easily.
 parseChat :: T.Text -> IO ()
@@ -309,11 +339,11 @@ parseChat msg = do
 
 -- | Parse Text into Ranking.
 parseRanking :: T.Text -> IO () -- Ranking
-parseRanking msg = atomicWriteIORef rankingInternal rankingRef
+parseRanking (tail . words . T.unpack ->  msg) = atomicWriteIORef rankingInternal (parseRank msg)
   where parseRank (rankedName:score:others) = (rankedName, read score) : parseRank others
         parseRank [_]                 = error $ "Unrecognized hiscore string found: " ++ show msg
         parseRank []                  = []
-        rankingRef                    = parseRank . tail . words $ T.unpack msg
+--        rankingRef                    = parseRank . tail . words $ T.unpack msg
 
 -- | Select team and send it to the socket.
 selectTeam :: Connection -> IO (Either String ())
@@ -339,17 +369,22 @@ run sid handler cb mv conn = do
   _ <- forkIO $ forever $ do
     msg <- receiveDataMessage conn
     val <- case msg of
-             (Text t txt) -> if txt == (Just $ TL.pack "T")
-                             then selectTeam conn
-                             else parseSkinData (decodeUtf8 (toStrict t))
+             (Text t txt) -> if | txt == (Just $ TL.pack "T") -> selectTeam conn
+                                | txt == (Just $ TL.pack "B") -> do
+                                    atomicWriteIORef battleRoyalFlagInternal True
+                                    return $ Right ()
+                                | txt == (Just $ TL.pack "E") -> do
+                                    atomicWriteIORef endFlagInternal True
+                                    return $ Right ()
+                                | otherwise                   -> parseSkinData (decodeUtf8 (toStrict t))
              (Binary bs) -> parseGameData $ unpack bs
     case val of
       Left errString -> do
         handler errString
         putMVar mv' ()
       Right _        -> do
-        action <- cb
-        when (isJust action) $ sendBinaryData conn $ convertToSendable (fromJust action)
+        action' <- cb
+        when (isJust action') $ sendBinaryData conn $ convertToSendable (fromJust action')
   takeMVar mv'
   putMVar mv ()
 
@@ -357,9 +392,8 @@ run sid handler cb mv conn = do
 runChat :: String -> ChatCallback -> ChatCallback -> ClientApp ()
 runChat sid cb chatSend conn = do
   sendTextData conn . T.pack $ sid ++ "\tCHAT"
-  receiveData conn >>= parseRanking
   _ <- forkIO $ forever $ do
-   receiveData conn >>= parseChat
+   receiveData conn >>= \d -> if T.isPrefixOf (T.pack "HISCORE") d then parseRanking d else parseChat d
    sendChat cb
   forever $ do
     sendChat chatSend
@@ -386,7 +420,6 @@ mainLoop sid handler cbGame cbChat chatSend isForever = withSocketsDo $ do
   where hostString = toAddrString hostAddress
         startClient pt = runClient hostString (fromEnum pt) "/"
 
--- need to think the way to get there.
 gameLoop :: String -> ErrorHandler -> GameReceiveCallback -> Bool -> MVar () -> IO ()
 gameLoop sid handler cb isForever mv' = do
   mv <- newEmptyMVar
@@ -394,7 +427,7 @@ gameLoop sid handler cb isForever mv' = do
   takeMVar mv
   killThread gameThreadID
   when isForever $ do
-    threadDelay (5 * 10^6) -- wait a second. so that the server will not be busy when the program connect again.
+    threadDelay (3 * 10^6) -- wait a second. so that the server will not be busy when the program connect again.
     gameLoop sid handler cb isForever mv'
   putMVar mv' ()
   where  hostString = toAddrString hostAddress

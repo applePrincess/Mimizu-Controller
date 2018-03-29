@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
+
 {-|
 Module      : Mimizu.Util
 Copyright   : (c) Apple Princess 2018
@@ -21,7 +23,9 @@ module Mimizu.Util
   , Index
   , intToWord8
   , integralToIndex
-  , makeTriplets
+--  , makeTriplets -- since this function is no longer work! due to format changing
+  , PlayerExternalInfo
+  , makeSextuplets
   , makeColors
   , diffAngle ) where
 
@@ -30,7 +34,8 @@ import           Data.Array.Unsafe (castSTUArray)
 import           Data.Bits     (shiftL, shiftR, (.&.))
 import           Data.Fixed    (mod')
 import           Data.Function ((&))
-import           Data.Word     (Word16, Word32, Word8)
+import           Data.List     (isInfixOf)
+import           Data.Word     (Word16, Word32, Word8, Word64)
 import           Control.Monad.ST (runST, ST)
 import           Numeric       (readHex)
 
@@ -83,7 +88,6 @@ convToFloat x = runST (cast x)
 {-# INLINE cast #-}
 cast :: (MArray (STUArray s) a (ST s), MArray (STUArray s) b (ST s)) => a -> ST s b
 cast x = newArray (0 :: Int, 0) x >>= castSTUArray >>= flip readArray 0
-
 
 -- | The representation of color palette.
 data Color = NeonBlue          -- ^ The clolor of #3333ff
@@ -158,12 +162,27 @@ intToWord8 num = if num >= 0 && num < 256
 integralToIndex :: (Enum a, Integral a) => a -> Index
 integralToIndex = conv
 
+
+type PlayerExternalInfo = (Index, String, [Color], Word16, Word16, Word32)
+
 -- | Convert Text to list of Triplets
 makeTriplets :: Text -> [(Index, String, [Color])]
-makeTriplets txt = (read $ unpack x, unpack y, makeColors $ unpack z):case xs of
+makeTriplets txt = (read $ unpack x, unpack y, makeColors $ unpack z): case xs of
                                                                [] -> []
                                                                _  -> makeTriplets (intercalate (pack "\t") xs)
   where (x:y:z:xs) = splitOn (pack "\t") txt
+
+-- | Convert Text to list of Quintuplets
+makeSextuplets :: Text -> [PlayerExternalInfo]
+makeSextuplets (lines . unpack -> ls) = makeSextuplet' ls
+  where makeSextuplet' :: [String] -> [PlayerExternalInfo]
+        makeSextuplet' (x:xs) = let [idx, name, col, w, l, hs] = if length ys /= 6 then head ys:"":tail ys else ys
+                                    ys                         = words x
+                                 in (read idx, name, makeColors col, read w, read l, read hs):
+                                    case xs of
+                                      [] -> []
+                                      _  -> makeSextuplet' xs
+        makeSextuplet' []    = []
 
 -- | Convert framework color enum from string
 makeColors :: String -> [Color]
