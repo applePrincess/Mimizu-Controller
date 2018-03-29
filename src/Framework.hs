@@ -33,7 +33,8 @@ module Framework
   , frameCount
   , battleRoyalFlag
   , endFlag
-  , mainLoop ) where
+  , mainLoop
+  , chatOnly ) where
 
 import           Control.Concurrent   ( forkIO, threadDelay, MVar, newEmptyMVar
                                       , takeMVar, putMVar, forkFinally, killThread )
@@ -403,6 +404,17 @@ runChat sid cb chatSend conn = do
           newChat <- cb'
           unless (T.null newChat) $ sendTextData conn newChat
 
+runChat' :: String -> String -> IO () -> ClientApp ()
+runChat' id pass cb conn = do
+--  sendTextData conn . T.pack $ sid ++ "\tCHAT"
+  sendTextData conn (T.pack $ "\t"++ id ++ "\t" ++ pass)
+  _ <- forkIO $ forever $ do
+   receiveData conn >>= \d -> if T.isPrefixOf (T.pack "HISCORE") d
+                              then parseRanking d
+                              else parseChat d
+   cb -- The cacllback, called when any new message is received, including Hi-Score.
+  forever $ threadDelay 1000
+
 -- | Entry point.
 mainLoop :: String -- ^ The session id you want to play.
   -> ErrorHandler -- ^ The callback, which will be called when error occured.
@@ -431,3 +443,11 @@ gameLoop sid handler cb isForever mv' = do
     gameLoop sid handler cb isForever mv'
   putMVar mv' ()
   where  hostString = toAddrString hostAddress
+
+chatOnly :: String -> String -> IO () -> IO ()
+chatOnly id pass cbChat = do
+  chatThreadID <- forkFinally (startClient chatPort (runChat' id pass cbChat)) (\_ -> return ())
+  forever $ do
+    threadDelay 10000000000000
+ where hostString = toAddrString hostAddress
+       startClient pt = runClient hostString (fromEnum pt) "/"

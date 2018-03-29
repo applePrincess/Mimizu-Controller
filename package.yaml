@@ -24,7 +24,12 @@ library:
 executables:
   mimizu:
     main: Main.hs
-    source-dirs: app
+    source-dirs: app/SampleBot
     dependencies:
       - mimizu
       - containers
+  chat:
+    main: Main.hs
+    source-dirs: app/CommentReader
+    dependencies:
+      - mimizu

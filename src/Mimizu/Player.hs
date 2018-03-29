@@ -176,7 +176,7 @@ modifyLose :: Word16 -> Maybe Player -> Maybe Player
 modifyLose d = maybe Nothing (\pl ->  Just $ pl { lose = d })
 
 -- | The helper function for 'Framework.MutablePlayerList', it will modify the skin
-modifyHighScore :: Word64 -> Maybe Player -> Maybe Player
+modifyHighScore :: Word32 -> Maybe Player -> Maybe Player
 modifyHighScore d = maybe Nothing (\pl ->  Just $ pl { highScore = d })
 
 -- | Returns X location in world coordinate of specified Player
