@@ -48,12 +48,15 @@ import qualified Data.Text            as T
 import qualified Data.Text.Lazy       as TL
 import           Data.Text.Encoding   (decodeUtf8)
 import           Data.Word
+import           System.IO
 import           System.IO.Unsafe
 
 import           Network.Socket
 import           Network.WebSockets
 
 import           Mimizu
+
+import Debug.Trace
 
 -- | The destination IP address the socket connects to, in the form of Word8 quadruplet.
 hostAddress :: (Word8, Word8, Word8, Word8)
@@ -298,7 +301,6 @@ parseGameData (x:xs) =
            else do parseDeath idx
                    parseGameData $ tail xs
      | x == frameCountParseTag -> do
-         print $ show (x:take 2 xs)
          parseFrameCount $ take 2 xs
          parseGameData $ drop 2 xs
      | x == mapSizeParseTag -> do
@@ -392,7 +394,7 @@ run sid handler cb mv conn = do
 -- | The actual websocket handling functin for 'chatPort'.
 runChat :: String -> ChatCallback -> ChatCallback -> ClientApp ()
 runChat sid cb chatSend conn = do
-  sendTextData conn . T.pack $ sid ++ "\tCHAT"
+  sendTextData conn . T.pack $ sid ++ "\tMIMIZU"
   _ <- forkIO $ forever $ do
    receiveData conn >>= \d -> if T.isPrefixOf (T.pack "HISCORE") d then parseRanking d else parseChat d
    sendChat cb
@@ -404,16 +406,19 @@ runChat sid cb chatSend conn = do
           newChat <- cb'
           unless (T.null newChat) $ sendTextData conn newChat
 
-runChat' :: String -> String -> IO () -> ClientApp ()
-runChat' id pass cb conn = do
---  sendTextData conn . T.pack $ sid ++ "\tCHAT"
-  sendTextData conn (T.pack $ "\t"++ id ++ "\t" ++ pass)
+runChat' :: String -> String -> IO () -> MVar () -> ClientApp ()
+runChat' id' pass cb mv conn = do
+  sendTextData conn (T.pack $ "\t"++ id' ++ "\t" ++ pass)
   _ <- forkIO $ forever $ do
-   receiveData conn >>= \d -> if T.isPrefixOf (T.pack "HISCORE") d
-                              then parseRanking d
-                              else parseChat d
-   cb -- The cacllback, called when any new message is received, including Hi-Score.
-  forever $ threadDelay 1000
+    receiveData conn >>= \d ->  if | T.isPrefixOf (T.pack "HISCORE") d    -> putStrLn "HiScore" >> parseRanking d
+                                   | otherwise                            -> putStrLn "Chat " >> parseChat d
+    putStrLn "SomeData"
+    hFlush stdout
+    cb
+  forever $ do
+    threadDelay 100000000
+  putStrLn "Ooops! Something went wrong..."
+  return ()
 
 -- | Entry point.
 mainLoop :: String -- ^ The session id you want to play.
@@ -446,8 +451,9 @@ gameLoop sid handler cb isForever mv' = do
 
 chatOnly :: String -> String -> IO () -> IO ()
 chatOnly id pass cbChat = do
-  chatThreadID <- forkFinally (startClient chatPort (runChat' id pass cbChat)) (\_ -> return ())
+  mv <- newEmptyMVar
+  chatThreadID <- forkFinally (startClient chatPort (runChat' id pass cbChat mv)) (\e -> return ())
   forever $ do
-    threadDelay 10000000000000
+    threadDelay 10000000
  where hostString = toAddrString hostAddress
        startClient pt = runClient hostString (fromEnum pt) "/"

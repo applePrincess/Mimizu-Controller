@@ -34,3 +34,5 @@ executables:
     dependencies:
       - mimizu
       - process
+      - optparse-applicative
+      - directory

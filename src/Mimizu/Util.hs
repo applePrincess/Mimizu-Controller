@@ -40,6 +40,7 @@ import           Control.Monad.ST (runST, ST)
 import           Numeric       (readHex)
 
 import           Data.Text     (Text, intercalate, pack, splitOn, unpack)
+import qualified Data.Text      as T
 
 -- | Convert from raw websocket data to Uint16
 conv8To16 :: [Word8] -> Word16
@@ -174,10 +175,9 @@ makeTriplets txt = (read $ unpack x, unpack y, makeColors $ unpack z): case xs o
 
 -- | Convert Text to list of Quintuplets
 makeSextuplets :: Text -> [PlayerExternalInfo]
-makeSextuplets (lines . unpack -> ls) = makeSextuplet' ls
-  where makeSextuplet' :: [String] -> [PlayerExternalInfo]
-        makeSextuplet' (x:xs) = let [idx, name, col, w, l, hs] = if length ys /= 6 then head ys:"":tail ys else ys
-                                    ys                         = words x
+makeSextuplets (T.lines -> ls) = makeSextuplet' ls
+  where makeSextuplet' :: [Text] -> [PlayerExternalInfo]
+        makeSextuplet' (x:xs) = let [idx, name, col, w, l, hs] = map T.unpack $ T.split (== '\t') x
                                  in (read idx, name, makeColors col, read w, read l, read hs):
                                     case xs of
                                       [] -> []
