@@ -5,13 +5,13 @@ import qualified Control.Exception     as E
 import           Control.Monad         (forever, when)
 import qualified Data.ByteString       as B
 import qualified Data.ByteString.Char8 as C
-import           Data.IORef
-import           Data.Maybe
 import qualified Data.Text             as T
 import qualified Data.Text.Encoding    as TE
 import           Data.Time.Clock.POSIX (getCurrentTime)
+import           System.Environment    (getArgs)
 import           System.IO             (hFlush, stdout, stdin, hSetEcho, hGetEcho)
 import           System.IO.Unsafe      (unsafePerformIO)
+import           System.Process        (createProcess, shell)
 
 import Network.Socket hiding (recv, send)
 import Network.Socket.ByteString (recv, send)
@@ -19,36 +19,42 @@ import Network.Socket.ByteString (recv, send)
 import Framework
 import Mimizu
 
-{-# NOINLINE bouyomiChanSocket #-}
-bouyomiChanSocket :: IORef (Maybe Socket)
-bouyomiChanSocket = unsafePerformIO $ newIORef Nothing
-
-
 chatReceived :: IO ()
 chatReceived = do
   _chats <- chats
   -- ハイスコアだけが送られている可能性もあるので, 注意。
-  sock <- readIORef bouyomiChanSocket
-  when (isJust sock) $ do
     -- 現状はハイスコアは送られてないと仮定する
-    let dat = generateBouyomiData $ last _chats
-    _ <- send (fromJust sock) dat
+  let dat = generateBouyomiData $ last _chats
+  actionOnBouyomi $ \sock -> do
+    _ <- send sock dat
     return ()
   return ()
 
-openBouyomi :: IO ()
-openBouyomi = do
+resolve :: HostName -> ServiceName -> IO AddrInfo
+resolve host port = do
+  let hints = defaultHints { addrSocketType = Stream }
+  addr:_ <- getAddrInfo (Just hints) (Just host) (Just port)
+  return addr
+
+open :: AddrInfo -> IO Socket
+open addr = do
+  sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+  connect sock $ addrAddress addr
+  return sock
+
+actionOnBouyomi :: (Socket -> IO ()) -> IO ()
+actionOnBouyomi action' = do
   addr <- resolve "127.0.0.1" "50001" -- will be softcoded
   sock <- open addr
-  atomicModifyIORef' bouyomiChanSocket (\x -> (Just sock, ()))
-  where  resolve host port = do
-           let hints = defaultHints { addrSocketType = Stream }
-           addr:_ <- getAddrInfo (Just hints) (Just host) (Just port)
-           return addr
-         open addr = do
-           sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-           connect sock $ addrAddress addr
-           return sock
+  action' sock
+  close sock
+
+sentToSoftalk :: B.ByteString -> IO ()
+sentToSoftalk msg = do
+  let str = B.drop 15 msg -- since we want to share headers to BouyomiChan
+  let process = shell ("D:/yharuhi39/Downloads/softalk/softalk.exe /W:" ++ (T.unpack .TE.decodeUtf8 $ str))
+  _<- createProcess process
+  return () -- enforce strict evaluation
 
 getPassword :: IO String
 getPassword = do
@@ -74,29 +80,19 @@ generateBouyomiData chat = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
         messageLength = conv32To8 . toEnum $ length messageString
         messageString = B.unpack . TE.encodeUtf8 . T.pack $ (sender chat) ++ "\t" ++ (message chat) -- ちょっと効率悪いかな？
 
+-- とりあえず第一引数がSoftalk だったらsoftalkに切り替える
 main :: IO ()
 main = do
+  _args <- getArgs
+  curr <- getCurrentTime
+  let c = Chat  TUGame  curr "りんご姫" "今日もいいペンキ☆"
+      cc = generateBouyomiData c
+  sentToSoftalk cc
+--  if length _args == 1 && head _args == "softalk"
+--    then
 --  putStrLn "ID? "
 --  id <- getLine
 --  password <- getPassword
-  -- only care about 棒読みちゃん
-  openBouyomi
-  curr <- getCurrentTime
-  let c = Chat  TUGame  curr "りんご姫" "今日もいいペンキ☆"
-  let cs = B.unpack . TE.encodeUtf8 . T.pack $ (sender c) ++ "\t" ++ (message c)
-  print c
-  let cc = generateBouyomiData c
-  sock <- readIORef bouyomiChanSocket
-  print $ length cs
-  print $ B.length cc
-  -- なんか2回に分けないとダメっぽい？
-  let header = B.take 15 cc
-      str    = B.drop 15 cc
-      sock' = fromJust sock
-  _ <- send sock' header
-  _ <- send sock' str
-  close sock'
---  atomicWriteIORef bouyomiChanSocket Nothing
 --  chatOnly id password chatReceived
 --  putStrLn $ '\t':(id ++ "\t" ++ password)
   return ()

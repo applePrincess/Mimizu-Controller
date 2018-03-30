@@ -33,3 +33,4 @@ executables:
     source-dirs: app/CommentReader
     dependencies:
       - mimizu
+      - process
