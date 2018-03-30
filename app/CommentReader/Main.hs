@@ -9,6 +9,7 @@ import           Data.IORef
 import           Data.Maybe
 import qualified Data.Text             as T
 import qualified Data.Text.Encoding    as TE
+import           Data.Time.Clock.POSIX (getCurrentTime)
 import           System.IO             (hFlush, stdout, stdin, hSetEcho, hGetEcho)
 import           System.IO.Unsafe      (unsafePerformIO)
 
@@ -64,7 +65,7 @@ generateBouyomiData :: Chat -> B.ByteString
 generateBouyomiData chat = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
                            ++ defaultVolume ++ defaultTone ++ defaultEncoding
                            ++ messageLength ++ messageString
-  where sendCommand   = [0x00, 0x01]
+  where sendCommand   = [0x01, 0x00]
         defaultSpeed  = [0xff, 0xff]
         defaultPitch  = [0xff, 0xff]
         defaultVolume = [0xff, 0xff]
@@ -75,13 +76,28 @@ generateBouyomiData chat = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
 
 main :: IO ()
 main = do
-  putStrLn "ID? "
-  id <- getLine
-  password <- getPassword
-
+--  putStrLn "ID? "
+--  id <- getLine
+--  password <- getPassword
   -- only care about 棒読みちゃん
   openBouyomi
+  curr <- getCurrentTime
+  let c = Chat  TUGame  curr "りんご姫" "今日もいいペンキ☆"
+  let cs = B.unpack . TE.encodeUtf8 . T.pack $ (sender c) ++ "\t" ++ (message c)
+  print c
+  let cc = generateBouyomiData c
+  sock <- readIORef bouyomiChanSocket
+  print $ length cs
+  print $ B.length cc
+  -- なんか2回に分けないとダメっぽい？
+  let header = B.take 15 cc
+      str    = B.drop 15 cc
+      sock' = fromJust sock
+  _ <- send sock' header
+  _ <- send sock' str
+  close sock'
+--  atomicWriteIORef bouyomiChanSocket Nothing
 --  chatOnly id password chatReceived
-  putStrLn $ '\t':(id ++ "\t" ++ password)
+--  putStrLn $ '\t':(id ++ "\t" ++ password)
   return ()
   where
