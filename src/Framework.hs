@@ -33,12 +33,12 @@ module Framework
   , frameCount
   , battleRoyalFlag
   , endFlag
-  , mainLoop
-  , chatOnly ) where
+  , mapSize
+  , mainLoop ) where
 
 import           Control.Concurrent   ( forkIO, threadDelay, MVar, newEmptyMVar
                                       , takeMVar, putMVar, forkFinally, killThread )
-import           Control.Monad        (forever, replicateM, unless, when)
+import           Control.Monad        (forever, replicateM, unless, when, void)
 import           Data.Bits            (shiftL, (.&.), (.|.))
 import qualified Data.ByteString      as BS
 import           Data.ByteString.Lazy (toStrict, unpack)
@@ -56,9 +56,9 @@ import           Network.WebSockets
 
 import           Mimizu
 
-import Debug.Trace
+--import Debug.Trace
 
--- | The destination IP address the socket connects to, in the form of Word8 quadruplet.
+-- | The desgtination IP address the socket connects to, in the form of Word8 quadruplet.
 hostAddress :: (Word8, Word8, Word8, Word8)
 hostAddress = (160, 16, 82, 222)
 
@@ -98,11 +98,11 @@ type Ranking           = [(String, Word32)]
 
 -- | Special case of 'convertToSendableWithKeyAndRotation'
 convertToSendable :: Action -> BS.ByteString
-convertToSendable action = convertToSendableWithKeyAndRotation action None False
+convertToSendable action' = convertToSendableWithKeyAndRotation action' None False
 
 -- | Special case of 'convertToSendableWithKeyAndRotation'
 convertToSendableWithKey :: Action -> ArrowKey -> BS.ByteString
-convertToSendableWithKey action arr  = convertToSendableWithKeyAndRotation action arr False
+convertToSendableWithKey action' arr  = convertToSendableWithKeyAndRotation action' arr False
 
 
 -- | Convert to websocket acceptable form, if we send by arrow keys and/or rotation
@@ -406,18 +406,36 @@ runChat sid cb chatSend conn = do
           newChat <- cb'
           unless (T.null newChat) $ sendTextData conn newChat
 
+parseForChat :: MVar () -> T.Text -> IO ()
+parseForChat mv d | T.isPrefixOf (T.pack "HISCORE") d = do
+                      putStrLn "HiScore"
+                      parseRanking d
+                  | T.pack "ID又はPASSが違います" == d = do
+                      putStrLn "You got an ERROR"
+                      putMVar mv ()
+                  | otherwise                         = do
+                      putStrLn "Chat "
+                      parseChat d
+
 runChat' :: String -> String -> IO () -> MVar () -> ClientApp ()
 runChat' id' pass cb mv conn = do
-  sendTextData conn (T.pack $ "\t"++ id' ++ "\t" ++ pass)
+  let idpass = T.pack $ "\t"++ id' ++ "\t" ++ pass
+  u <- sendTextData conn idpass
+  print u
+  putStrLn "ID and Password sent"
+  hFlush stdout
+  print (T.unpack idpass)
   _ <- forkIO $ forever $ do
-    receiveData conn >>= \d ->  if | T.isPrefixOf (T.pack "HISCORE") d    -> putStrLn "HiScore" >> parseRanking d
-                                   | otherwise                            -> putStrLn "Chat " >> parseChat d
-    putStrLn "SomeData"
+--    putStrLn "BBBB" -- 表示されるのが正しい
+    msg <- receiveDataMessage conn
+    case msg of
+      (Text _ (Just txt)) -> parseForChat mv (TL.toStrict txt)
+      other               -> print other
+    putStrLn "Got SomeData" -- ここも,表示されないとおかしい
     hFlush stdout
     cb
-  forever $ do
-    threadDelay 100000000
-  putStrLn "Ooops! Something went wrong..."
+  _  <- forever $ threadDelay 100000000
+  putStrLn "Ooops! Something went wrong..." -- ここは,表示されないのが正しい
   return ()
 
 -- | Entry point.
@@ -427,33 +445,54 @@ mainLoop :: String -- ^ The session id you want to play.
   -> ChatCallback -- ^ The callback, which will be called when any new message from chat received.
   -> ChatCallback -- ^ The function, which will be called every 1s, so that you can actively send.
   -> Bool         -- ^ The flag, True if run this thread again, False otherwise.
+  -> Bool         -- ^ Specifies whether Chat only or not.
+  -> Maybe (Word8, Word8, Word8, Word8) -- ^ The IP Address
+  -> Maybe String -- ^ ID
+  -> Maybe String -- ^ Password
+  -> Maybe (IO ()) -- ^ Chat recevecd callback
   -> IO ()
-mainLoop sid handler cbGame cbChat chatSend isForever = withSocketsDo $ do
+mainLoop sid handler cbGame cbChat chatSend isForever isChatOnly maybeIP maybeID maybePass cb = withSocketsDo $ do
   mv <- newEmptyMVar
-  chatThreadID <- forkFinally (startClient chatPort (runChat sid cbChat chatSend)) (\_ -> return ())
-  _ <- forkFinally (gameLoop sid handler cbGame isForever mv) (\_ -> return ())
+  chatThreadID <- if isChatOnly -- チャットのみかどうか
+                  then do if isJust maybeIP -- IP 指定されているかどうか
+                            then if (isJust maybeID) && (isJust maybePass) -- ID とぱすわーどがあるかどうか
+                                 then forkFinally (startClient (toAddrString (fromJust maybeIP)) chatPort (runChat' (fromJust maybeID) (fromJust maybePass) (fromJust cb) mv )) (void .print)
+                                 else error "Passowd and/or ID not present"
+                            else if (isJust maybeID) && (isJust maybePass) -- IP が指定されてないelse
+                                 then forkFinally (startClient hostString chatPort (runChat' (fromJust maybeID) (fromJust maybePass) (fromJust cb) mv )) (void .print)
+                                 else error "Passowd and/or ID not present"
+                  else if isJust maybeIP
+                       then do _ <- forkFinally (gameLoop sid handler cbGame isForever mv (toAddrString (fromJust maybeIP))) (void . print) -- ゲームも
+                               forkFinally (startClient (toAddrString (fromJust maybeIP)) chatPort (runChat sid cbChat chatSend)) (void . print) -- ゲームも
+                       else do _ <- forkFinally (gameLoop sid handler cbGame isForever mv hostString) (void . print) -- ゲームも
+                               forkFinally (startClient hostString chatPort (runChat sid cbChat chatSend)) (void . print) -- ゲームも
   _ <- takeMVar mv
   killThread chatThreadID
   where hostString = toAddrString hostAddress
-        startClient pt = runClient hostString (fromEnum pt) "/"
+        startClient hs pt = runClient hs (fromEnum pt) "/"
 
-gameLoop :: String -> ErrorHandler -> GameReceiveCallback -> Bool -> MVar () -> IO ()
-gameLoop sid handler cb isForever mv' = do
+gameLoop :: String -> ErrorHandler -> GameReceiveCallback -> Bool -> MVar () -> String -> IO ()
+gameLoop sid handler cb isForever mv' hs = do
   mv <- newEmptyMVar
-  gameThreadID <- forkFinally (runClient hostString (fromEnum gamePort) "/" (run sid handler cb mv)) (\_ -> return ())
+  gameThreadID <- forkFinally (runClient hs (fromEnum gamePort) "/" (run sid handler cb mv)) (\_ -> return ())
   takeMVar mv
   killThread gameThreadID
   when isForever $ do
     threadDelay (3 * 10^6) -- wait a second. so that the server will not be busy when the program connect again.
-    gameLoop sid handler cb isForever mv'
+    gameLoop sid handler cb isForever mv' hs
   putMVar mv' ()
   where  hostString = toAddrString hostAddress
-
+{-
 chatOnly :: String -> String -> IO () -> IO ()
-chatOnly id pass cbChat = do
+chatOnly id' pass cbChat = withSocketsDo $ do
   mv <- newEmptyMVar
-  chatThreadID <- forkFinally (startClient chatPort (runChat' id pass cbChat mv)) (\e -> return ())
-  forever $ do
-    threadDelay 10000000
+  putStrLn $ "Connecting to: " ++ hostString ++ " " ++ show chatPort
+  hFlush stdout
+  chatThreadID <- forkFinally (startClient chatPort (runChat' id' pass cbChat mv)) (void .print)
+  _ <-  forever $ threadDelay 10000
+  putStrLn "AAAA" -- 表示されないのが正しい
+  hFlush stdout
+  killThread chatThreadID
  where hostString = toAddrString hostAddress
        startClient pt = runClient hostString (fromEnum pt) "/"
+-}

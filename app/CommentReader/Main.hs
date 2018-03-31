@@ -37,7 +37,7 @@ parseOptions = Options
   <$> option auto
   ( long "reading-system"
   <> short 'r'
-  <> value Bouyomi
+  <> value Softalk
   <> showDefault
   <> metavar "Bouyomi|Softalk"
   <> help "Specify which reading sytem to use")
@@ -64,14 +64,16 @@ parseOptions = Options
   <> help "Port to Bouyomi-chan")
 
 -- will be optparsed later.... may be
+{-# NOINLINE options #-}
 options :: IORef Options
-options = unsafePerformIO $ newIORef (Options Bouyomi "softalk.exe" "127.0.0.1" 50001)
+options = unsafePerformIO $ newIORef (Options Softalk "softalk.exe" "127.0.0.1" 50001)
 
 chatReceived :: IO ()
 chatReceived = do
+  print "ABC" -- 表示されないとおかしい
   _chats <- chats
   let dat = generateBouyomiData $ last _chats
-  when (null _chats) (return ())
+  when (null _chats) (return ()) -- ハイスコアの可能性もあるので,始めの方はただリターンするだけになるかな？ リターンしても問題無い。
   opt <- readIORef options
   if reader opt == Softalk
     then sendToSoftalk (softalkPath opt) dat
@@ -93,6 +95,7 @@ open addr = do
 
 actionOnBouyomi :: String -> Int -> (Socket -> IO ()) -> IO ()
 actionOnBouyomi host port action' = do
+  print "DEF" -- デフォルトがこれなので,これは表示されないとおかしい。
   addr <- resolve host (show port)
   sock <- open addr
   action' sock
