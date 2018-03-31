@@ -408,34 +408,24 @@ runChat sid cb chatSend conn = do
 
 parseForChat :: MVar () -> T.Text -> IO ()
 parseForChat mv d | T.isPrefixOf (T.pack "HISCORE") d = do
-                      putStrLn "HiScore"
                       parseRanking d
                   | T.pack "ID又はPASSが違います" == d = do
                       putStrLn "You got an ERROR"
                       putMVar mv ()
                   | otherwise                         = do
-                      putStrLn "Chat "
                       parseChat d
 
 runChat' :: String -> String -> IO () -> MVar () -> ClientApp ()
 runChat' id' pass cb mv conn = do
   let idpass = T.pack $ "\t"++ id' ++ "\t" ++ pass
-  u <- sendTextData conn idpass
-  print u
-  putStrLn "ID and Password sent"
-  hFlush stdout
-  print (T.unpack idpass)
+  sendTextData conn idpass
   _ <- forkIO $ forever $ do
---    putStrLn "BBBB" -- 表示されるのが正しい
     msg <- receiveDataMessage conn
     case msg of
-      (Text _ (Just txt)) -> parseForChat mv (TL.toStrict txt)
+      (Text msg _ ) -> parseForChat mv (decodeUtf8 (toStrict msg))
       other               -> print other
-    putStrLn "Got SomeData" -- ここも,表示されないとおかしい
-    hFlush stdout
     cb
   _  <- forever $ threadDelay 100000000
-  putStrLn "Ooops! Something went wrong..." -- ここは,表示されないのが正しい
   return ()
 
 -- | Entry point.
@@ -482,17 +472,3 @@ gameLoop sid handler cb isForever mv' hs = do
     gameLoop sid handler cb isForever mv' hs
   putMVar mv' ()
   where  hostString = toAddrString hostAddress
-{-
-chatOnly :: String -> String -> IO () -> IO ()
-chatOnly id' pass cbChat = withSocketsDo $ do
-  mv <- newEmptyMVar
-  putStrLn $ "Connecting to: " ++ hostString ++ " " ++ show chatPort
-  hFlush stdout
-  chatThreadID <- forkFinally (startClient chatPort (runChat' id' pass cbChat mv)) (void .print)
-  _ <-  forever $ threadDelay 10000
-  putStrLn "AAAA" -- 表示されないのが正しい
-  hFlush stdout
-  killThread chatThreadID
- where hostString = toAddrString hostAddress
-       startClient pt = runClient hostString (fromEnum pt) "/"
--}

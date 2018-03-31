@@ -91,4 +91,4 @@ main = do
   pid <- getLine
 --  ref <- newIORef 0 :: IO (IORef Int)
 --  mainLoop pid errorHandler (gameReceive ref) chatCallback sendingFunction False
-  mainLoop pid errorHandler sampleGameReceive chatCallback sendingFunction False
+  mainLoop pid errorHandler sampleGameReceive chatCallback sendingFunction False False Nothing Nothing Nothing Nothing
