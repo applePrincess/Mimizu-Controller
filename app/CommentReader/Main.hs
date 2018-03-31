@@ -208,7 +208,7 @@ main = do
 #ifdef DEBUG
          (isChatOnly opt')
 #else
-         False
+         True
 #endif
          (Just host)
          Nothing
@@ -223,7 +223,7 @@ main = do
 #ifdef DEBUG
               (isChatOnly opt')
 #else
-              False
+             True
 #endif
               (Just host)
               (Just id')

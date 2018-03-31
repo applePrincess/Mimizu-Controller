@@ -410,7 +410,7 @@ parseForChat :: MVar () -> T.Text -> IO ()
 parseForChat mv d | T.isPrefixOf (T.pack "HISCORE") d = do
                       parseRanking d
                   | T.pack "ID又はPASSが違います" == d = do
-                      putStrLn "You got an ERROR"
+                      putStrLn "ID or Password may be incorrect."
                       putMVar mv ()
                   | otherwise                         = do
                       parseChat d
