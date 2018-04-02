@@ -29,28 +29,21 @@ data Options = Options
                , softalkPath :: String
                , bouyomiHost :: String
                , bouyomiPort :: Int
+               , identifier  :: String
+               , password    :: String
+               , formatStr   :: String
 #ifdef DEBUG
                , connectTo   :: String
                , isChatOnly  :: Bool
 #endif
                }
-{-
-data Options = Options
-               { reader      :: ReadingSystem
-               , softalkPath :: String
-               , bouyomiHost :: String
-               , bouyomiPort :: Int
-               , connectTo   :: String
-               , isChatOnly  :: Bool
-               }
--}
 
 parseOptions :: Parser Options
 parseOptions = Options
   <$> option auto
   ( long "reading-system"
   <> short 'r'
-  <> value Softalk
+  <> value Bouyomi
   <> showDefault
   <> metavar "Bouyomi|Softalk"
   <> help "Specify which reading sytem to use")
@@ -75,6 +68,25 @@ parseOptions = Options
   <> value 50001
   <> showDefault
   <> help "Port to Bouyomi-chan")
+  <*> option str
+  ( long "id"
+  <> short 'i'
+  <> metavar "ID"
+  <> help "Your Desired ID to log in. (if not present, the program will ask  at the beginning.)"
+  <> value "")
+  <*> option str
+  ( long "password"
+  <> short 'w'
+  <> help "The password, corresponding to ID specified. (if not present, the program will ask at the beginning.)"
+  <> metavar "PASSWORD"
+  <> value "")
+  <*> option str
+  ( long "format"
+  <> short 'f'
+  <> help "Specifies the format, which read by the Voice Synthesiser, %m: message, %s: sender"
+  <> metavar "FORMAT"
+  <> value "%s\t%m"
+  <> showDefault )
 #ifdef DEBUG
   <*> option str
   ( long "game-connect-to"
@@ -91,10 +103,13 @@ parseOptions = Options
 
 {-# NOINLINE options #-}
 options :: IORef Options
-options = unsafePerformIO $ newIORef (Options Softalk
+options = unsafePerformIO $ newIORef (Options Bouyomi
                                        "softalk.exe"
                                        "127.0.0.1"
                                        50001
+                                       ""
+                                       ""
+                                       "%s\t%m"
 #ifdef DEBUG
                                        "160.16.82.222" False
 #endif
@@ -109,7 +124,7 @@ chatCallback = do
   opt <- readIORef options
   if null cs
     then return ()
-    else let dat = generateBouyomiData $ last cs
+    else let dat = generateBouyomiData (last cs) (formatStr opt)
          in sendToSoftalk (softalkPath opt) dat
   return $ T.pack ""
 
@@ -120,8 +135,8 @@ chatReceived :: IO ()
 chatReceived = do
   _chats <- chats
   when (null _chats) (return ())
-  let dat = generateBouyomiData $ last _chats
   opt <- readIORef options
+  let dat = generateBouyomiData (last _chats) (formatStr opt)
   if reader opt == Softalk
     then sendToSoftalk (softalkPath opt) dat
     else actionOnBouyomi (bouyomiHost opt) (bouyomiPort opt) $ \sock -> do  _ <- send sock dat
@@ -149,7 +164,7 @@ actionOnBouyomi host port action' = do
 
 sendToSoftalk :: FilePath -> B.ByteString -> IO ()
 sendToSoftalk spath (T.unpack . TE.decodeUtf8 . B.drop 15 -> msg) = do
-  let process = shell $ spath ++ " /W:" ++ msg
+  let process = shell $ spath ++ " /X:1 /W:" ++ msg
   _<- createProcess process
   return ()
 
@@ -167,11 +182,16 @@ getPassword = do
   hSetEcho stdin _oldEcho
   return pass'
 
+
+formatMessage :: Chat -> String -> T.Text
+formatMessage c fStr = T.replace (T.pack "%s") (T.pack $ sender c) $
+                       T.replace (T.pack "%m") (T.pack $ message c) (T.pack fStr)
+
 -- これもフォーマット させたいが,今は時間がないので, とりあえず 名前とメッセージだけを送信!
-generateBouyomiData :: Chat -> B.ByteString
-generateBouyomiData chat = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
-                           ++ defaultVolume ++ defaultTone ++ defaultEncoding
-                           ++ messageLength ++ messageString
+generateBouyomiData :: Chat -> String ->  B.ByteString
+generateBouyomiData chat fStr = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
+                                ++ defaultVolume ++ defaultTone ++ defaultEncoding
+                                ++ messageLength ++ messageString
   where sendCommand   = [0x01, 0x00]
         defaultSpeed  = [0xff, 0xff]
         defaultPitch  = [0xff, 0xff]
@@ -179,7 +199,7 @@ generateBouyomiData chat = B.pack $ sendCommand ++ defaultSpeed ++ defaultPitch
         defaultTone   = [0x00, 0x00]
         defaultEncoding = [0x00]
         messageLength = conv32To8 . toEnum $ length messageString
-        messageString = B.unpack . TE.encodeUtf8 . T.pack $ sender chat ++ "\t" ++ message chat
+        messageString = B.unpack . TE.encodeUtf8 $ formatMessage chat fStr
 
 sampleGameReceive :: GameReceiveCallback
 sampleGameReceive = return Nothing
@@ -192,10 +212,6 @@ main = do
           <> header "chat - a simple comment reader bridge" )
   opt <- execParser hdr
   atomicModifyIORef' options $ const (opt, ())
-  opt' <- readIORef options
-  putStr "PID: "
-  hFlush stdout
-  pid <- getLine
 #ifdef DEBUG
   let host  = hFunc . map ((read :: String -> Word8) . T.unpack) $ T.split (== '.') $ T.pack (connectTo opt')
       cFunc = if isChatOnly opt' then Just chatReceived else Nothing
@@ -203,8 +219,18 @@ main = do
   let host = (160, 16, 82, 222)
       cFunc = Just chatReceived
 #endif
+  opt' <- readIORef options
+#ifdef DEBUG
+  putStr "PID: "
+  hFlush stdout
+  pid <- getLine
   if not (null pid)
     then mainLoop pid errorHandler sampleGameReceive chatCallback chatCallback' False
+#else
+  if False
+    then undefined
+#endif
+
 #ifdef DEBUG
          (isChatOnly opt')
 #else
@@ -214,11 +240,14 @@ main = do
          Nothing
          Nothing
          cFunc
-    else do putStr "ID: "
-            hFlush stdout
-            id' <- getLine
-            password <- getPassword
-            putStrLn password
+    else do id' <- if null (identifier opt')
+                   then do putStr "ID: "
+                           hFlush stdout
+                           getLine
+                   else return (identifier opt')
+            password' <- if null (password opt')
+                         then getPassword
+                         else return (password opt')
             mainLoop "" errorHandler sampleGameReceive chatCallback chatCallback' False
 #ifdef DEBUG
               (isChatOnly opt')
@@ -227,7 +256,7 @@ main = do
 #endif
               (Just host)
               (Just id')
-              (Just password)
+              (Just password')
               cFunc
             -- chatOnly id' password chatReceived
   return ()
