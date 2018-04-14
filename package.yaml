@@ -26,13 +26,16 @@ executables:
     main: Main.hs
     source-dirs: app/SampleBot
     dependencies:
-      - mimizu
       - containers
+      - mimizu
+
   chat:
     main: Main.hs
     source-dirs: app/CommentReader
     dependencies:
-      - mimizu
-      - process
-      - optparse-applicative
       - directory
+      - haskeline
+      - mimizu
+      - optparse-applicative
+      - process
+

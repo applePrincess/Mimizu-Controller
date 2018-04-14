@@ -7,12 +7,14 @@ import           Control.Monad             (when)
 import qualified Data.ByteString           as B
 import           Data.IORef
 import           Data.List                 (elemIndices)
+import           Data.Maybe                (fromJust)
 import           Data.Semigroup            ((<>))
 import qualified Data.Text                 as T
 import qualified Data.Text.Encoding        as TE
 import           Data.Word
 import           System.IO                 (hFlush, hGetEcho, hSetEcho, stdin,
                                             stdout)
+import qualified System.Console.Haskeline  as HS
 import           System.IO.Unsafe          (unsafePerformIO)
 import           System.Process            (createProcess, shell)
 
@@ -149,7 +151,7 @@ sendToSoftalk spath (T.unpack . TE.decodeUtf8 . B.drop 15 -> msg) = do
   let process = shell $ spath ++ " /X:1 /W:" ++ msg
   _<- createProcess process
   return ()
-
+{-
 getPassword :: IO String
 getPassword = do
   putStr "Password: "
@@ -163,7 +165,9 @@ getPassword = do
               else drop (last idx + 1) pass
   hSetEcho stdin _oldEcho
   return pass'
-
+-}
+getPassword :: IO String
+getPassword = HS.runInputT HS.defaultSettings $ HS.getPassword (Just '·') "Password: " >>= return . fromJust
 
 formatMessage :: Chat -> String -> T.Text
 formatMessage c fStr = T.replace (T.pack "\\t") (T.pack "\t") $
